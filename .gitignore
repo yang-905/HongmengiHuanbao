@@ -1,0 +1,19 @@
+# 构建产物 / 运行产物
+# 注意：禁止写成裸 build/ —— 鸿蒙产物由 app/.gitignore 负责
+target/
+/node_modules/
+/dist/
+*.log
+
+# 第三方图标库源码（约 110MB，只取需要的 SVG 进 resources/base/media）
+/tabler-icons-main/
+/tabler-icons-main.zip
+
+# 编辑器 / 系统文件
+.idea/
+.vscode/
+.DS_Store
+*.iml
+
+# 鸿蒙 IDE 预览中间产物
+.preview/

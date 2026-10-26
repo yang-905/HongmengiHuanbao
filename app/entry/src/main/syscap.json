@@ -1,0 +1,19 @@
+{
+  "devices": {
+    "general": ["default", "tablet"]
+  },
+  "production": {
+    "removedSysCaps": [
+      "SystemCapability.Multimedia.Media.AVTranscoder",
+      "SystemCapability.Communication.Bluetooth.Core",
+      "SystemCapability.DistributedDataManager.DataObject.DistributedObject",
+      "SystemCapability.DistributedHardware.DeviceManager",
+      "SystemCapability.Multimedia.AVSession.AVInputCast",
+      "SystemCapability.HiviewDFX.HiRetrieval",
+      "SystemCapability.Communication.WiFi.P2P",
+      "SystemCapability.DistributedDataManager.KVStore.Core",
+      "SystemCapability.Multimedia.Drm.Core",
+      "SystemCapability.Customization.EnterpriseDeviceManager"
+    ]
+  }
+}

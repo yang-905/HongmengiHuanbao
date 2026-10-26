@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "一触青绿"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "一触青绿"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "一触青绿"
+    },
+    {
+      "name": "permission_internet_reason",
+      "value": "用于行为记录云同步、因子库更新与科普内容获取"
+    },
+    {
+      "name": "permission_network_reason",
+      "value": "用于检测网络状态以判断云同步是否可用"
+    },
+    {
+      "name": "permission_distributed_reason",
+      "value": "用于在家庭多设备间通过近场分布式通道同步低碳记录，不经过任何服务器"
+    }
+  ]
+}

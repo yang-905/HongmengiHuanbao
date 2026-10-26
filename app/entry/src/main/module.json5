@@ -1,0 +1,93 @@
+{
+  "module": {
+    "name": "entry",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "EntryAbility",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "abilities": [
+      {
+        "name": "EntryAbility",
+        "srcEntry": "./ets/entryability/EntryAbility.ets",
+        "description": "$string:EntryAbility_desc",
+        "icon": "$media:app_icon",
+        "label": "$string:EntryAbility_label",
+        "startWindowIcon": "$media:app_icon",
+        "startWindowBackground": "$color:start_window_background",
+        "exported": true,
+        /*
+         * 声明支持深色模式，并跟随系统（auto）。
+         * ------------------------------------------------------------------
+         * 取值：
+         *   dark  = 强制始终深色（系统深色/浅色下都按深色渲染窗口与系统栏）
+         *   light = 强制始终浅色
+         *   auto  = 跟随系统深色（系统深 → 本应用深，系统浅 → 本应用浅）
+         *
+         * ⚠️ 早期曾写 `dark`：那会**强制**系统把本应用永远按深色渲染，
+         *   于是「系统栏/窗口」被锁成深色，而 app 自身明暗又由内部令牌
+         *   控制（默认浅色）→ 出现「深色系统栏 + 浅色内容」的割裂，
+         *   看起来就像「深色模式没适配」。
+         *
+         * 现改为 `auto`：系统层不强制，明暗完全由 ThemeMode 自控
+         * （默认跟随系统 colorMode，用户也可在设置页手动锁定），
+         * 系统栏图标色由 ThemeMode.applySystemBar 按实际主题反色下发，
+         * 深浅状态始终一致。
+         */
+        "metadata": [
+          {
+            "name": "ohos.extension.colorMode",
+            "value": "auto"
+          }
+        ],
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "ohos.want.action.home"
+            ]
+          }
+        ]
+      }
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET",
+        "reason": "$string:permission_internet_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.GET_NETWORK_INFO",
+        "reason": "$string:permission_network_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.DISTRIBUTED_DATASYNC",
+        "reason": "$string:permission_distributed_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      }
+    ]
+  }
+}
