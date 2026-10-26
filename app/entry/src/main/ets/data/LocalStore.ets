@@ -146,26 +146,34 @@ export interface LocalStats {
   level: number
   /**
    * 今日任务奖励积分合计（已领取部分）。
-   * 与记录积分一并计入 totalPoints —— 任务奖励是真实获得的积分；
-   * 可用余额则另走持久化口径（claimTask 时即加进余额，与日期无关），
-   * 不混进记录流（记录流驱动分类图表/连续天数等口径）。
+   * 仅用于任务页/当日口径展示；累计获得走 taskPointsTotal。
    */
   taskPoints: number
+  /**
+   * 全部历史任务奖励积分合计（已领取部分）。
+   * totalPoints = 记录积分 + 本字段，跨天后不会丢失此前领取的任务奖励。
+   */
+  taskPointsTotal: number
 }
 
 /**
- * 备份槽结构（v2：记录 + 兑换券一起备份）。
- * v1 旧备份是纯 LocalRecord[] 数组 —— restore() 用 Array.isArray 判别兼容，
- * 老用户升级后恢复不会丢历史备份（见 restore() 注释）。
+ * 备份槽结构（v3：记录 + 兑换券 + 任务领取 + 余额一起备份）。
+ * v1 旧备份是纯 LocalRecord[] 数组；v2 是 {records, coupons}；
+ * restore() 按数组/version 判别兼容，老用户升级后恢复不丢历史备份。
  * 落点：RDB backup_slot 表（v1 起不再进 Preferences）。
  */
 class BackupPayload {
+  version: number = 3
   records: LocalRecord[] = []
   coupons: LocalCoupon[] = []
+  claims: LocalTaskClaim[] = []
+  balance: number = 0
 
-  constructor(r: LocalRecord[], c: LocalCoupon[]) {
+  constructor(r: LocalRecord[], c: LocalCoupon[], tc: LocalTaskClaim[], b: number) {
     this.records = r
     this.coupons = c
+    this.claims = tc
+    this.balance = b
   }
 }
 
@@ -451,8 +459,8 @@ export class LocalStore {
   }
 
   /**
-   * 旧口径余额（一次性迁移 / 预览器兜底专用）：
-   * 累计获得（记录积分 + 今日任务奖励）− 兑换消耗，钳 0。
+   * 旧口径余额（一次性迁移 / 旧备份恢复兜底专用）：
+   * 累计获得（记录积分 + 全部历史任务奖励）− 兑换消耗，钳 0。
    * ------------------------------------------------------------------
    * ⚠️ 不调 stats() 出口：迁移发生在 init 尾部、早于任何 stats() 调用，
    *    而 stats() 首行就是 await init() —— 直接调会递归init（loaded_
@@ -462,7 +470,7 @@ export class LocalStore {
     try {
       const agg: RecordAgg = await CarbonRdb.statsAgg(LocalStore.user_,
         AppClock.dateStr(), AppClock.monthStr())
-      const earned: number = agg.totalPoints + LocalStore.taskPointsToday()
+      const earned: number = agg.totalPoints + LocalStore.taskPointsTotal()
       let exchanged: number = 0
       for (let i: number = 0; i < LocalStore.coupons_.length; i++) {
         exchanged += LocalStore.coupons_[i].points
@@ -562,14 +570,25 @@ export class LocalStore {
     }
   }
 
-  /** 灌入 30 天演示数据，让各页面首启即有内容（RDB 事务内整体替换） */
-  private static async seedDemo(): Promise<void> {
+  /**
+   * 灌入 30 天演示数据，让各页面首启即有内容（RDB 事务内整体替换）。
+   * resetAssets=true 用于「恢复演示数据」：券/任务领取一并清空，
+   * 否则余额只按种子记录重算会与残留资产口径矛盾。
+   * ensureSeed 首启走 false，保留已有券/任务领取（正常首启为空）。
+   */
+  private static async seedDemo(resetAssets: boolean = false): Promise<void> {
     const arr: LocalRecord[] = MockStore.records()
-    await CarbonRdb.replaceRecords(LocalStore.user_, arr)
+    if (resetAssets) {
+      await CarbonRdb.replaceUserData(LocalStore.user_, arr, [], [])
+      LocalStore.coupons_ = []
+      LocalStore.taskClaims_ = []
+    } else {
+      await CarbonRdb.replaceRecords(LocalStore.user_, arr)
+    }
     /*
      * 余额按种子记录积分**整体重算**（不用增量）：种子是整体替换语义，
      * 调用点（ensureSeed 首启 / restoreDemo 恢复演示）的旧余额与新快照
-     * 无关。种子无兑换券，余额 = 种子记录积分合计。
+     * 无关。resetAssets=true 时种子无兑换券/任务，余额 = 种子记录积分合计。
      * 演示命名空间的余额键在此首次落盘 → loadBalance 之后直接采用。
      */
     let pts: number = 0
@@ -984,10 +1003,10 @@ export class LocalStore {
     LocalStore.syncEcoMood()
   }
 
-  /** 恢复演示数据（事务内整体替换记录） */
+  /** 恢复演示数据（事务内整体替换记录，并清空券/任务领取） */
   static async restoreDemo(): Promise<void> {
     await LocalStore.init()
-    await LocalStore.seedDemo()
+    await LocalStore.seedDemo(true)
     LocalStore.syncEcoMood()
   }
 
@@ -999,9 +1018,9 @@ export class LocalStore {
   }
 
   /**
-   * 备份：把当前记录 + 券快照写入 RDB 备份槽，返回累计备份份数。
-   * 份数与时间是轻量键值，仍走 Preferences；快照本身进 RDB
-   * （备份大小随数据增长，不能再放 Preferences）。
+   * 备份：把当前记录 + 券 + 任务领取 + 余额快照写入 RDB 备份槽，
+   * 返回累计备份份数。份数与时间是轻量键值，仍走 Preferences；
+   * 快照本身进 RDB（备份大小随数据增长，不能再放 Preferences）。
    */
   static async backup(): Promise<number> {
     // preferences 与 RDB 的读写都可能抛异常（磁盘满、文件损坏等）。
@@ -1010,10 +1029,14 @@ export class LocalStore {
     try {
       const p: preferences.Preferences = await LocalStore.prefs()
       const recs: LocalRecord[] = await LocalStore.allRecords()
-      // v2 格式：记录 + 兑换券一起备份（只备份记录会让恢复后券包清空、
-      // 可用积分口径回跳 —— 兑换过的券是真实资产，必须进备份）
+      // v3 格式：记录 + 券 + 任务领取 + 余额一起备份。只备份记录会让恢复后
+      // 券包清空、任务积分丢失、可用积分口径回跳 —— 三类都是真实资产。
+      const bal: number = LocalStore.balanceLoaded_
+        ? LocalStore.balance_
+        : await LocalStore.computeLegacyBalance()
       await CarbonRdb.saveBackup(LocalStore.user_,
-        JSON.stringify(new BackupPayload(recs, LocalStore.coupons_.slice())))
+        JSON.stringify(new BackupPayload(recs, LocalStore.coupons_.slice(),
+          LocalStore.taskClaims_.slice(), bal)))
       await p.put(LocalStore.keyFor(KEY_BACKUP_TIME), LocalStore.nowText())
       const prev: number = (await p.get(LocalStore.keyFor(KEY_BACKUP_COUNT), 0)) as number
       const next: number = prev + 1
@@ -1034,38 +1057,63 @@ export class LocalStore {
         throw new Error('没有可用的备份')
       }
       /*
-       * 备份格式双兼容：
+       * 备份格式兼容：
        *   v1（旧构建）= 纯 LocalRecord[] 数组 → 券按空列表恢复；
-       *   v2（本版）  = BackupPayload {records, coupons}。
-       * 用 Array.isArray 判别，别用 try/catch 探形状 —— 解析失败要走
-       * 外层 catch 转「恢复失败」，探形状会把真错误吞掉。
+       *   v2          = BackupPayload {records, coupons}；
+       *   v3（本版）  = {version, records, coupons, claims, balance}。
+       * 用 Array.isArray / version 判别，别用 try/catch 探形状 —— 解析失败
+       * 要走外层 catch 转「恢复失败」，探形状会把真错误吞掉。
        */
       const parsed: Object = JSON.parse(json) as Object
       let recs: LocalRecord[] = []
       let cps: LocalCoupon[] = []
+      let claims: LocalTaskClaim[] = []
+      let savedBalance: number = 0
+      let hasClaims: boolean = false
       if (Array.isArray(parsed)) {
         recs = parsed as LocalRecord[]
       } else {
         const payload: BackupPayload = parsed as BackupPayload
-        recs = payload.records
-        cps = payload.coupons
+        if (payload.records !== undefined && payload.records !== null) {
+          recs = payload.records
+        }
+        if (payload.coupons !== undefined && payload.coupons !== null) {
+          cps = payload.coupons
+        }
+        if (payload.version === 3 && Array.isArray(payload.claims) &&
+          typeof payload.balance === 'number' && !isNaN(payload.balance)) {
+          hasClaims = true
+          claims = payload.claims as LocalTaskClaim[]
+          savedBalance = payload.balance
+        }
       }
-      if (recs === undefined || recs === null || recs.length === 0) {
+      if (hasClaims) {
+        // v3 快照可能只有任务/券/余额而没有记录；全空才视为无效备份
+        if (recs.length === 0 && cps.length === 0 && claims.length === 0 && savedBalance <= 0) {
+          throw new Error('备份内容为空')
+        }
+      } else if (recs.length === 0) {
+        // v1/v2 没有任务/余额字段，仍按旧口径要求至少有记录
         throw new Error('备份内容为空')
       }
-      if (cps === undefined || cps === null) {
-        cps = []
-      }
-      // 跨表单事务：记录与券要么整体恢复、要么整体回滚
-      await CarbonRdb.replaceUserData(LocalStore.user_, recs, cps)
-      LocalStore.coupons_ = cps
       /*
-       * 余额按恢复后的快照**整体重算**（不用增量）：备份是整账户快照，
-       * 恢复前的余额与新快照无关。口径与 loadBalance 的首次迁移一致 ——
-       * max(0, 记录积分合计 + 今日任务奖励 − 券积分合计)，负坑当场抹平。
-       * 任务领取不在备份内，但当前会话的今日领取仍算数（已领 = 已到账）。
+       * v3：记录 + 券 + 任务领取三表整体恢复，余额直接采用备份快照。
+       * v1/v2：备份本身没有任务领取，保留当前任务领取，避免历史任务积分
+       *        被旧备份抹掉；余额按「记录 + 全部任务 - 券」重算。
+       * 三表替换在同一事务内完成，不会出现恢复一半的中间态。
        */
-      await LocalStore.setBalance(await LocalStore.computeLegacyBalance())
+      if (hasClaims) {
+        await CarbonRdb.replaceUserData(LocalStore.user_, recs, cps, claims)
+        LocalStore.taskClaims_ = claims.slice()
+      } else {
+        await CarbonRdb.replaceUserData(LocalStore.user_, recs, cps)
+      }
+      LocalStore.coupons_ = cps.slice()
+      if (hasClaims) {
+        await LocalStore.setBalance(savedBalance)
+      } else {
+        await LocalStore.setBalance(await LocalStore.computeLegacyBalance())
+      }
       return recs.length
     } catch (err) {
       throw new Error('恢复失败：' + ((err as Error).message ?? '本机存储不可用'))
@@ -1117,13 +1165,16 @@ export class LocalStore {
     const dates: string[] = await CarbonRdb.distinctDates(LocalStore.user_)
 
     /*
-     * 任务奖励积分并入 earned（2026-10-23）：每日任务奖励是**真实可用积分**，
-     * 必须计入累计获得与可用余额，否则「领取成功却一分没到账」。
+     * 任务奖励积分并入 earned：每日任务奖励是**真实可用积分**，必须计入
+     * 累计获得与可用余额，否则「领取成功却一分没到账」。
+     * ⚠️ 累计获得必须用**全部历史任务积分**，不能只加今日：跨天后今日值
+     *    归零，会让 totalPoints 下降、植树周期进度回退。今日值仅用于展示。
      * 口径分离：它不混进记录流 —— 记录流驱动分类图表/连续天数/等级等，
      * 塞进任务奖励会让「步行 2 次」这类图表口径失真。
      */
     const taskPts: number = LocalStore.taskPointsToday()
-    const earned: number = agg.totalPoints + taskPts
+    const taskPtsTotal: number = LocalStore.taskPointsTotal()
+    const earned: number = agg.totalPoints + taskPtsTotal
 
     // ⚠️ 口径沿革（两次整改，用户反馈驱动）：
     //   ① 旧逻辑 available = earned − floor(earned/POINTS_PER_TREE)×POINTS_PER_TREE，
@@ -1177,6 +1228,7 @@ export class LocalStore {
       exchangedPoints: exchanged,
       treeExchangedPoints: treeExchanged,
       taskPoints: taskPts,
+      taskPointsTotal: taskPtsTotal,
       recordCount: agg.recordCount,
       continuousDays: LocalStore.calcStreak(dates),
       treeCount: treeCount,
@@ -1244,6 +1296,15 @@ export class LocalStore {
     let s: number = 0
     for (let i = 0; i < LocalStore.taskClaims_.length; i++) {
       if (LocalStore.taskClaims_[i].dateStr === today) s += LocalStore.taskClaims_[i].points
+    }
+    return s
+  }
+
+  /** 全部历史任务奖励积分合计（已领取部分） */
+  static taskPointsTotal(): number {
+    let s: number = 0
+    for (let i = 0; i < LocalStore.taskClaims_.length; i++) {
+      s += LocalStore.taskClaims_[i].points
     }
     return s
   }

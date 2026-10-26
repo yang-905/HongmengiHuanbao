@@ -35,9 +35,10 @@ const CAPSULE_ANIM_MS: number = 360
  */
 const CAPSULE_EXIT_SCALE: number = 0.34
 /**
- * Tab 切换时长（ms）：药丸滑动、文字高亮、整页滑动共用同一段动画。
- * 三者由 switchTab 里**同一个 animateTo** 驱动 —— 同帧开始、
- * 同时长、同曲线（EaseInOut），因此同时结束，观感是一个整体动作。
+ * Tab 切换时长（ms）：与 Tabs 原生转场（animationDuration）同值。
+ * 页面位移由 Tabs 原生滑动负责；药丸滑动、文字高亮由 applyActiveTab
+ * 里的**同一个 animateTo** 驱动 —— 同帧开始、同时长、同曲线（EaseInOut），
+ * 因此同时结束，观感是一个整体动作。点击与左右滑动都走这条路径。
  * 300ms 是「滑得到位又不拖沓」的平衡点。
  */
 const TAB_ANIM_MS: number = 300
@@ -61,10 +62,8 @@ const TAB_ANIM_MS: number = 300
  *    滑动时会明显掉帧。因此药丸只用半透明色 + 描边，不加模糊。
  * 2. 药丸的 shadow 同样每帧重绘，卡顿明显，已去掉。
  * 3. 药丸平移只改 translate（纯合成层操作，不触发布局重排）。
- * 4. Tab 切换：药丸 / 文字高亮 / 整页滑动由**同一个 animateTo** 驱动
- *    （300ms EaseInOut），同帧开始同时结束；页面位移只改 translate
- *    （纯合成层），页面本身不重建，动画期间主线程空闲
- *    （见 switchTab / contentTransition）。
+ * 4. Tab 切换走 Tabs 原生滑动与转场；药丸 / 文字高亮由 applyActiveTab
+ *    的 animateTo 同步（300ms EaseInOut），页面本身不重建。
  * 5. 胶囊进出子页面**不是** visibility 秒切：秒切等于「直接消失」，
  *    观感简陋，且 Blank 不占位会让「＋」钮同时跳到左侧。
  *    现改为 translate（滑向＋钮）+ scale（缩小）+ opacity（淡出）
@@ -96,22 +95,6 @@ struct Index {
 
   @StorageProp('themeTick') themeTick: number = 0
   @State private currentTab: number = 0
-  /**
-   * 主内容区实测宽度（vp）：Tab 切换时整页滑动一屏的距离。
-   * 由包裹 Tabs 的 Column 的 onAreaChange 实测提供。
-   */
-  @State private contentW: number = 0
-
-  /**
-   * 四个一级页的横向位移（vp）：Tab 切换时旧页滑出、新页滑入。
-   * ⚠️ 用四个独立 @State 而不是 number[]：@State 数组**元素**赋值
-   * （this.pageShift[0] = x）不会触发刷新，必须整数组替换才行，
-   * 四个独立变量写起来反而更直白。
-   */
-  @State private pageShift0: number = 0
-  @State private pageShift1: number = 0
-  @State private pageShift2: number = 0
-  @State private pageShift3: number = 0
   @State private showSplash: boolean = true
   @State private showOnboarding: boolean = false
   /** 是否处于子页面（路由栈有内容）：决定胶囊是长条还是右侧圆珠 */
@@ -288,10 +271,8 @@ struct Index {
   @StorageLink('sessionUser') @Watch('onSessionUser') sessionUser: string = ''
   private pathStack: NavPathStack = AppRouter.pathStack
   /**
-   * Tabs 控制器。⚠️ Tab 切换必须走 changeIndex()，**不能改 index 属性**：
-   * 官方文档明确「直接修改 index 跳页时，切换动效不生效」，
-   * customContentTransition 自定义转场也只由「点击页签 /
-   * changeIndex()」两种场景触发。index 属性已从 Tabs 上移除，
+   * Tabs 控制器。点击底部 Tab 时走 changeIndex() 触发原生转场；
+   * 左右滑动由 Tabs 自身处理，onChange 回写 currentTab。
    * currentTab 只作我们自己的簿记（药丸/高亮/守卫用）。
    */
   private tabsController: TabsController = new TabsController()
@@ -471,10 +452,6 @@ aboutToDisappear(): void {
     }
     this.currentTab = 0
     AppStorage.setOrCreate<number>('activeTab', 0)
-    this.setPageShift(0, 0)
-    this.setPageShift(1, 0)
-    this.setPageShift(2, 0)
-    this.setPageShift(3, 0)
     // 底部导航形态复位：旧会话停在子页面时胶囊是收起态，不复位的话
     // 新会话第一帧底部只剩「＋」圆钮（要等 400ms 轮询才恢复）
     this.onSubPage = false
@@ -709,85 +686,24 @@ aboutToDisappear(): void {
     return this.cellW() * this.currentTab
   }
 
-  /** 记录主内容区实测宽度（onAreaChange 的 width 可能是百分比，忽略） */
-  private onContentArea(w: number | string): void {
-    if (typeof w === 'string') return
-    if (w > 0 && Math.abs(w - this.contentW) > 0.5) {
-      this.contentW = w
-    }
-  }
-
-  /** 按页索引写位移（四个独立 @State，绕开数组元素赋值不刷新的坑） */
-  private setPageShift(index: number, v: number): void {
-    if (index === 0) {
-      this.pageShift0 = v
-    } else if (index === 1) {
-      this.pageShift1 = v
-    } else if (index === 2) {
-      this.pageShift2 = v
-    } else if (index === 3) {
-      this.pageShift3 = v
-    }
-  }
-
   /**
-   * Tab 切换：**药丸、文字高亮、整页滑动由同一个 animateTo 驱动**，
-   * 同帧开始、同时长同曲线（TAB_ANIM_MS / EaseInOut）、同时结束。
-   *
-   * ① 起始帧：新页先甩到一侧屏外（直接赋值即动画起点，
-   *    官方 customContentTransition 示例同款写法）。旧页**不重置** ——
-   *    若它正被上一次切换推送中（连点场景），让它从当前所在处
-   *    继续滑离，避免位置跳变。
-   * ② 结束帧（animateTo 闭包）：旧页滑出另一侧、新页归位。
-   *    药丸 translate 与文字高亮都读 currentTab，同样在这段动画里补间。
-   * ③ changeIndex 触发 Tabs 自定义内容转场：转场期间两页以 Stack
-   *    布局叠放（树序即层序 —— 前进时新页在上、后退时旧页在上，
-   *    均为自然滑动观感），位移全部由上面的 animateTo 驱动，
-   *    转场代理只负责到点收尾（见 contentTransition）。
-   *
-   * 为什么原来不流畅：旧写法在同一个 animateTo 里改 currentTab，
-   * 药丸滑动（200ms）与整页重渲染（Dashboard 等页全是卡片/渐变/模糊）
-   * 挤在同一批帧里，主线程被页面构建占满，合成层动画跟着掉帧。
-   * 现在页面位移只改 translate（纯合成层），页面本身不重建，
-   * 动画期间主线程空闲；Scroll 位置等页内状态也原样保留。
+   * 选中态同步：点击底部 Tab 与 Tabs 原生滑动共用。
+   * currentTab 在 animateTo 内更新，药丸与高亮保持同一段补间；
+   * activeTab 广播给记录页等「切回本页即重拉」的页面。
    */
+  private applyActiveTab(index: number): void {
+    if (this.currentTab === index) return
+    this.getUIContext().animateTo({ duration: TAB_ANIM_MS, curve: Curve.EaseInOut }, (): void => {
+      this.currentTab = index
+    })
+    AppStorage.setOrCreate<number>('activeTab', index)
+  }
+
+  /** 点击底部 Tab：同步选中态后交给控制器做原生转场 */
   private switchTab(index: number): void {
     if (this.currentTab === index) return
-    const from: number = this.currentTab
-    const dir: number = index > from ? 1 : -1
-    // 兜底：onAreaChange 一定早于首次点击到达，真为 0 时用常见屏宽
-    const w: number = this.contentW > 0 ? this.contentW : 360
-    this.currentTab = index
-    // 广播当前激活 Tab：记录页等据此「切回本页即重拉」，
-    // 避免自定义转场下 onPageShow 不触发导致回到本页仍显示旧数据
-    AppStorage.set<number>('activeTab', index)
-    // ① 新页起始帧：甩到一侧屏外（旧页不重置，理由见上）
-    this.setPageShift(index, dir * w)
-    // ② 结束帧：旧页滑出另一侧、新页归位（与药丸/高亮同一段动画）
-    this.getUIContext().animateTo({ duration: TAB_ANIM_MS, curve: Curve.EaseInOut }, (): void => {
-      this.setPageShift(from, -dir * w)
-      this.setPageShift(index, 0)
-    })
-    // ③ 换页：走控制器而不是 index 属性（改属性跳页不动画）
+    this.applyActiveTab(index)
     this.tabsController.changeIndex(index)
-  }
-
-  /**
-   * Tabs 自定义内容转场：**只负责「让两页叠放一段时间」**。
-   *
-   * 真正的位移由 switchTab 的 animateTo 统一驱动（与药丸同一段动画），
-   * 这里绝不碰位移 —— 两段动画各滑各的反而会互相打断。
-   * 代理不主动调 finishTransition：靠 timeout（动画时长 + 60ms 缓冲）
-   * 到点自动结束，保证 Stack 叠放布局至少活到位移动画完全播完 ——
-   * 旧页不会滑到一半被 Tabs 收回布局（那会看到内容「闪断」）。
-   */
-  private contentTransition(from: number, to: number): TabContentAnimatedTransition {
-    return {
-      timeout: TAB_ANIM_MS + 60,
-      transition: (proxy: TabContentTransitionProxy): void => {
-        // 位移见 switchTab；此处无需做事，等超时收尾即可
-      }
-    }
   }
 
   /** 「记录」入口：唤起行为录入半模态面板（长条第 5 格与圆珠共用） */
@@ -1221,8 +1137,7 @@ aboutToDisappear(): void {
         Column() {
           Tabs({ controller: this.tabsController }) {
             /*
-             * 四个一级页各包一层全尺寸 Column 并挂 translate：
-             * Tab 切换时旧页/新页的整页平移由 switchTab 驱动，
+             * 四个一级页各包一层全尺寸 Column：
              * 页面本身不重建（Scroll 位置等页内状态原样保留）。
              */
             TabContent() {
@@ -1231,7 +1146,6 @@ aboutToDisappear(): void {
               }
               .width('100%').opacity(this.themeTick >= 0 ? 1 : 0)
               .height('100%')
-              .translate({ x: this.pageShift0 })
             }
 
             TabContent() {
@@ -1242,7 +1156,6 @@ aboutToDisappear(): void {
               .width('100%')
               .opacity(this.themeTick >= 0 ? 1 : 0)
               .height('100%')
-              .translate({ x: this.pageShift1 })
             }
 
             TabContent() {
@@ -1252,7 +1165,6 @@ aboutToDisappear(): void {
               .width('100%')
               .opacity(this.themeTick >= 0 ? 1 : 0)
               .height('100%')
-              .translate({ x: this.pageShift2 })
             }
 
             TabContent() {
@@ -1262,12 +1174,11 @@ aboutToDisappear(): void {
               .width('100%')
               .opacity(this.themeTick >= 0 ? 1 : 0)
               .height('100%')
-              .translate({ x: this.pageShift3 })
             }
           }
           .barHeight(0)
-          .scrollable(false)
-          .animationDuration(0)
+          .scrollable(true)
+          .animationDuration(TAB_ANIM_MS)
           /*
            * Tabs 自身显式透明 —— 全链路「底色只由 Index 根层实色提供」：
            * Tab 内容层与根层之间隔着 Navigation + Tabs，任何一层带默认白底，
@@ -1275,14 +1186,8 @@ aboutToDisappear(): void {
            * 胶囊 backdropBlur 采样到白 → 玻璃发白、液态感全无。
            */
           .backgroundColor(Color.Transparent)
-          /*
-           * 自定义内容转场：转场期间参与动画的两页以 Stack 布局叠放，
-           * 整页位移由 switchTab 的 animateTo 驱动（与药丸同步），
-           * 到点自动收尾。⚠️ 换页必须走 tabsController.changeIndex()，
-           * 改 index 属性跳页不触发自定义转场（动效不生效）。
-           */
-          .customContentTransition((from: number, to: number): TabContentAnimatedTransition => {
-            return this.contentTransition(from, to)
+          .onChange((index: number): void => {
+            this.applyActiveTab(index)
           })
           .layoutWeight(1)
           /*
@@ -1298,10 +1203,6 @@ aboutToDisappear(): void {
         }
         .width('100%')
         .height('100%')
-        // 实测内容区宽度：Tab 切换时整页滑动一屏的距离
-        .onAreaChange((old: Area, area: Area): void => {
-          this.onContentArea(area.width as number | string)
-        })
         /*
          * 沉浸式底部：**不再留 76px 占位 Blank，也不铺底色**。
          *

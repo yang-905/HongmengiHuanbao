@@ -475,10 +475,9 @@ export struct RecordListPage {
   @StorageLink('ecoTick') @Watch('onEcoTick') ecoTick: number = 0
 
   /**
-   * 当前激活 Tab（Index 在每次切换时写入）。
-   * ⚠️ 本应用用 translate + customContentTransition 自定义了 Tab 转场，
-   * 实测 onPageShow 在切回时**不保证触发**（首页注释已确认），
-   * 因此「回到记录页看最新数据」不能依赖 onPageShow，
+   * 当前激活 Tab（Index 在点击/滑动切换时写入）。
+   * ⚠️ 四个一级页常驻在 Tabs 内，实测 onPageShow 在切回时**不保证触发**
+   * （首页注释已确认），因此「回到记录页看最新数据」不能依赖 onPageShow，
    * 改由 activeTab 信号兜底：切回本页（index=1）立刻重拉。
    */
   @StorageLink('activeTab') @Watch('onActiveTab') activeTab: number = 0
@@ -503,8 +502,8 @@ export struct RecordListPage {
 
   /**
    * 切回「记录」Tab 的刷新入口（@Watch 驱动，理由同 onEcoTick）。
-   * activeTab 由 Index.switchTab 写入，这里只在本页被选中时重拉，
-   * 兜住「页面常驻、切回来时数据已变」的场景。
+   * activeTab 由 Index.applyActiveTab 写入（点击与滑动共用），
+   * 这里只在本页被选中时重拉，兜住「页面常驻、切回来时数据已变」的场景。
    */
   onActiveTab(): void {
     this.onStorageChange('activeTab')

@@ -986,14 +986,30 @@ export class CarbonRdb {
   }
 
   /**
-   * 事务内整体替换「记录 + 券」（恢复备份用）。
-   * 备份是跨表快照，两表必须同事务落地，否则恢复一半会丢券。
+   * 事务内整体替换「记录 + 券（+ 可选任务领取）」（恢复备份用）。
+   * 备份是跨表快照，多表必须同事务落地，否则恢复一半会丢券/丢任务分。
+   * claims 不传时完全不触碰 task_claim：v1/v2 旧备份没有任务字段，
+   * 由 LocalStore 保留当前领取记录并按全部任务积分重算余额。
    */
-  static async replaceUserData(userKey: string, recs: LocalRecord[], cps: LocalCoupon[]): Promise<void> {
+  static async replaceUserData(
+    userKey: string,
+    recs: LocalRecord[],
+    cps: LocalCoupon[],
+    claims?: LocalTaskClaim[]
+  ): Promise<void> {
+    const replaceClaims: boolean = claims !== undefined
+    let claimList: LocalTaskClaim[] = []
+    if (claims !== undefined) {
+      claimList = claims
+    }
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
-      CarbonRdb.memOf(userKey).records = recs.slice()
-      CarbonRdb.memOf(userKey).coupons = cps.slice()
+      const m: MemUserData = CarbonRdb.memOf(userKey)
+      m.records = recs.slice()
+      m.coupons = cps.slice()
+      if (replaceClaims) {
+        m.claims = claimList.slice()
+      }
       return
     }
     await store.beginTransaction()
@@ -1004,6 +1020,11 @@ export class CarbonRdb {
       const p2: relationalStore.RdbPredicates = new relationalStore.RdbPredicates('carbon_coupon')
       p2.equalTo('user_key', userKey)
       await store.delete(p2)
+      if (replaceClaims) {
+        const p3: relationalStore.RdbPredicates = new relationalStore.RdbPredicates('task_claim')
+        p3.equalTo('user_key', userKey)
+        await store.delete(p3)
+      }
       const rBuckets: Array<relationalStore.ValuesBucket> =
         recs.map((r: LocalRecord): relationalStore.ValuesBucket => CarbonRdb.recordToBucket(userKey, r))
       if (rBuckets.length > 0) {
@@ -1013,6 +1034,21 @@ export class CarbonRdb {
         cps.map((c: LocalCoupon): relationalStore.ValuesBucket => CarbonRdb.couponToBucket(userKey, c))
       if (cBuckets.length > 0) {
         await store.batchInsert('carbon_coupon', cBuckets)
+      }
+      if (replaceClaims) {
+        const tBuckets: Array<relationalStore.ValuesBucket> =
+          claimList.map((c: LocalTaskClaim): relationalStore.ValuesBucket => {
+            return {
+              user_key: userKey,
+              task_code: c.taskCode,
+              date_str: c.dateStr,
+              points: c.points,
+              claim_time: Date.now()
+            }
+          })
+        if (tBuckets.length > 0) {
+          await store.batchInsert('task_claim', tBuckets)
+        }
       }
       await store.commit()
     } catch (err) {
