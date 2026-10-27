@@ -846,16 +846,14 @@ export struct TreePickerDialog {
   @Prop visible: boolean = false;
   /** 当前选中（顶层）索引，即用户将认养的树种 */
   @State selectedIdx: number = 0;
-  /** 正在滑出的旧顶层索引（-1 表示无） */
-  @State prevIdx: number = -1;
-  /** 滑出卡片的水平位移（0=中心，-420=向左滑走，+420=向右滑走） */
-  @State flyX: number = 0;
-  /** 滑出卡片的透明度（1=不透明，0=隐去） */
-  @State flyOpacity: number = 1;
-  /** 动画进行中标志（防止连点叠加） */
+  /** 手指拖拽位移：顶层卡片实时跟随，松手后回弹或提交切换 */
+  @State dragX: number = 0;
+  /** 是否正在拖拽（拖拽中关闭补间动画，做到「手推卡片」实时跟手） */
+  @State dragging: boolean = false;
+  /** 切换动画进行中标志（防止连点 / 中途打断） */
   @State animating: boolean = false;
-  /** 手势拖拽位移（不渲染，仅记录） */
-  private dragX: number = 0;
+  /** 当前过渡时长（ms）：拖拽中/直接换走=0（零延迟），回弹/按钮=有过渡 */
+  @State animMs: number = 0;
   onCancel: () => void = (): void => {}
   onConfirm: (treeName: string) => void = (_: string): void => {}
 
@@ -870,6 +868,9 @@ export struct TreePickerDialog {
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
 
   private static readonly TREE_COST: number = 3000;
+  private static readonly SIDE_X: number = 52;    // 侧卡向内偏移量（px）：越小重叠越深
+  private static readonly SNAP: number = 52;      // 切换阈值=一张卡间距：松手超过则直接换走
+  private static readonly MAX_DRAG: number = 72;  // 拖拽最大位移（px）
 
   private readonly trees: TreeItem[] = [
     { key: 'willow', name: '旱柳', icon: '🌾', desc: '速生绿化' },
@@ -892,81 +893,68 @@ export struct TreePickerDialog {
     return this.trees[this.selectedIdx]
   }
 
-  /** 卡片 i 当前所处的「层」：0=顶层（最前/最大/居中），越大越往后、越小、越下移 */
-  private layerOf(i: number): number {
-    return ((i - this.selectedIdx) % this.trees.length + this.trees.length) % this.trees.length
+  /* —— 堆叠轮播定位：中心放大、左右缩小并强重叠于背后、隐藏更外层（避免幽灵缩略图）—— */
+  /** 卡片 i 相对当前选中的有符号位置：-1=左(上一张)，0=中，+1=右(下一张)，其余隐藏 */
+  private rel(i: number): number {
+    const len = this.trees.length
+    let p = ((i - this.selectedIdx) % len + len) % len
+    if (p > len / 2) p -= len
+    return p
+  }
+  /** 当前卡片的连续水平坐标（含拖拽位移）：中心=0，右=+，左=- */
+  private cxOf(i: number): number {
+    return this.rel(i) * TreePickerDialog.SIDE_X + this.dragX
+  }
+  private scaleOf(i: number): number {
+    const t = Math.abs(this.cxOf(i)) / TreePickerDialog.SIDE_X
+    if (t <= 1) return 1 - 0.14 * t            // 中心 1 → 侧卡 0.86
+    return 0.86
+  }
+  private opacityOf(i: number): number {
+    const t = Math.abs(this.cxOf(i)) / TreePickerDialog.SIDE_X
+    return t <= 1 ? 1 : 0                       // 仅中+左右三层可见，更外层隐藏
+  }
+  private zOf(i: number): number {
+    return 1000 - Math.round(Math.abs(this.cxOf(i)))
   }
 
-  /* —— 各槽位属性：flying 卡片（正在滑出的旧顶层）覆盖为固定中心滑出态 —— */
-  private slotX(i: number): number {
-    if (this.animating && i === this.prevIdx) return this.flyX
-    return 0
-  }
-  private slotY(i: number): number {
-    if (this.animating && i === this.prevIdx) return 0
-    return this.layerOf(i) * 16
-  }
-  private slotScale(i: number): number {
-    if (this.animating && i === this.prevIdx) return 1
-    return Math.max(0.8, 1 - this.layerOf(i) * 0.06)
-  }
-  private slotOpacity(i: number): number {
-    if (this.animating && i === this.prevIdx) return this.flyOpacity
-    return this.layerOf(i) < 3 ? 1 : 0
-  }
-  private slotZ(i: number): number {
-    if (this.animating && i === this.prevIdx) return this.trees.length + 1
-    return this.trees.length - this.layerOf(i)
-  }
-
-  /** 上一张：旧顶层向右滑出并沉底，前一张（栈底）浮上来成为新顶层（循环） */
-  private prev(): void {
+  /**
+   * 提交切换：dir>0 下一张，dir<0 上一张。
+   * animate=false：直接换走（零跳变，无额外过渡）—— 用于拖拽松手；
+   * animate=true ：短过渡滑动 —— 用于按钮点击。
+   */
+  private go(dir: number, animate: boolean): void {
     if (this.animating) return
-    this.prevIdx = this.selectedIdx
-    this.selectedIdx = (this.selectedIdx - 1 + this.trees.length) % this.trees.length
-    this.flyX = 0
-    this.flyOpacity = 1
     this.animating = true
-    setTimeout((): void => { this.flyX = 420; this.flyOpacity = 0 }, 16)
-    setTimeout((): void => {
-      this.prevIdx = -1
-      this.flyX = 0
-      this.flyOpacity = 1
-      this.animating = false
-    }, 320)
-  }
-
-  /** 下一张：旧顶层向左滑出并沉底，第二张浮上来成为新顶层（循环） */
-  private next(): void {
-    if (this.animating) return
-    this.prevIdx = this.selectedIdx
-    this.selectedIdx = (this.selectedIdx + 1) % this.trees.length
-    this.flyX = 0
-    this.flyOpacity = 1
-    this.animating = true
-    setTimeout((): void => { this.flyX = -420; this.flyOpacity = 0 }, 16)
-    setTimeout((): void => {
-      this.prevIdx = -1
-      this.flyX = 0
-      this.flyOpacity = 1
-      this.animating = false
-    }, 320)
-  }
-
-  private onPanUpdate(e: GestureEvent): void {
-    // 仅记录拖拽位移，松手时据此触发切换（不实时跟手，避免与 deck 动画冲突）
-    this.dragX = e.offsetX
-  }
-
-  /** 松手：向右拖 >80 → 上一张；向左拖 >80 → 下一张；否则归零 */
-  private onPanEnd(): void {
-    if (this.animating) { this.dragX = 0; return }
-    if (this.dragX > 80) {
-      this.prev()
-    } else if (this.dragX < -80) {
-      this.next()
-    }
+    this.dragging = false
+    this.animMs = animate ? 220 : 0
+    const step = dir > 0 ? 1 : -1
+    this.selectedIdx = (this.selectedIdx + step + this.trees.length) % this.trees.length
     this.dragX = 0
+    setTimeout((): void => { this.animating = false; this.animMs = 0 }, animate ? 240 : 60)
+  }
+
+  /** 拖拽中：卡片实时跟随手指（零延迟跟手），并限制最大位移 */
+  private onPanUpdate(e: GestureEvent): void {
+    if (this.animating) return
+    this.dragging = true
+    this.animMs = 0
+    const x = e.offsetX
+    this.dragX = Math.max(-TreePickerDialog.MAX_DRAG, Math.min(TreePickerDialog.MAX_DRAG, x))
+  }
+
+  /** 松手：超过≈一张卡间距则「直接换走」；不够则平滑回弹到中心 */
+  private onPanEnd(): void {
+    if (this.animating) { this.dragging = false; this.animMs = 0; this.dragX = 0; return }
+    if (this.dragX > TreePickerDialog.SNAP) {
+      this.go(-1, false)                          // 向右拖 → 上一张（直接换走）
+    } else if (this.dragX < -TreePickerDialog.SNAP) {
+      this.go(1, false)                           // 向左拖 → 下一张（直接换走）
+    } else {
+      this.dragging = false
+      this.animMs = 260                            // 回弹加过渡
+      this.dragX = 0
+    }
   }
 
   build() {
@@ -1003,77 +991,46 @@ export struct TreePickerDialog {
           .width('100%')
           .alignItems(HorizontalAlign.Start)
 
-          /* 轮播：10 张树卡片「牌堆」叠加居中 + 上一个/下一个按钮钉在左右两端 + PanGesture */
+          /* 卡片轮播区：中间放大、左右缩小向内偏移的 3D 堆叠；手指/鼠标拖拽跟手、松手吸附 */
           Stack({ alignContent: Alignment.Center }) {
-            /* 左：上一个按钮 */
-            Column({ space: 2 }) {
-              Text('‹')
-                .fontSize(26)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(this.tc(Neutral.TEXT))
-              Text('上一个')
+            ForEach(this.trees, (_t: TreeItem, i: number) => {
+              this.CardSlot(i)
+            }, (_t: TreeItem, i: number): string => 'tree_slot_' + i.toString())
+          }
+          .width(320)
+          .height(220)
+          .gesture(
+            PanGesture({ direction: PanDirection.Horizontal, distance: 5 })
+              .onActionUpdate((e: GestureEvent): void => { this.onPanUpdate(e) })
+              .onActionEnd((): void => { this.onPanEnd() })
+              .onActionCancel((): void => { this.onPanEnd() })
+          )
+
+          /* 底部控制条：左「上一个」 · 圆点+序号 · 右「下一个」 */
+          Row({ space: Space.MD }) {
+            this.NavBtn(false)
+            Column({ space: 4 }) {
+              Row({ space: 4 }) {
+                ForEach(this.trees, (_t: TreeItem, idx: number) => {
+                  Blank()
+                    .width(idx === this.selectedIdx ? 16 : 6)
+                    .height(6)
+                    .borderRadius(3)
+                    .backgroundColor(idx === this.selectedIdx ? this.tc(EcoTheme.primaryDeep(this.ecoLevel)) : this.tc(Neutral.TEXT_MUTED))
+                    .animation({ duration: AppleMotion.MICRO_MS, curve: AppleMotion.IN })
+                }, (_t: TreeItem, idx: number): string => 'dot_' + idx.toString())
+              }
+              Text((this.selectedIdx + 1) + ' / ' + this.trees.length)
                 .fontSize(FontSize.CAPTION)
                 .fontColor(this.tc(Neutral.TEXT_SUB))
             }
-            .width(56)
-            .height(72)
-            .align(Alignment.Start)
-            .justifyContent(FlexAlign.Center)
-            .borderRadius(18)
-            .linearGradient(this.tw(GlassLight.surface(Glass.PANEL_LIVE_BG, GlassTier.CARD, '', 1)))
-            .border({ width: 1, color: this.tw(GlassLight.borderColors(GlassTier.CARD, '', 1)) })
-            .onClick((): void => { this.prev() })
-
-            /* 居中：10 张卡片牌堆叠加（顶层 = 当前选中，点下一个向左滑走并沉底） */
-            Stack({ alignContent: Alignment.Center }) {
-              ForEach(this.trees, (_t: TreeItem, i: number) => {
-                this.CardSlot(i)
-              }, (_t: TreeItem, i: number): string => 'tree_slot_' + i.toString())
-            }
-            .width(196)
-            .height(240)
-            .gesture(
-              PanGesture({ direction: PanDirection.Horizontal, distance: 5 })
-                .onActionUpdate((e: GestureEvent): void => { this.onPanUpdate(e) })
-                .onActionEnd((): void => { this.onPanEnd() })
-                .onActionCancel((): void => { this.onPanEnd() })
-            )
-
-            /* 右：下一个按钮 */
-            Column({ space: 2 }) {
-              Text('›')
-                .fontSize(26)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(this.tc(Neutral.TEXT))
-              Text('下一个')
-                .fontSize(FontSize.CAPTION)
-                .fontColor(this.tc(Neutral.TEXT_SUB))
-            }
-            .width(56)
-            .height(72)
-            .align(Alignment.End)
-            .justifyContent(FlexAlign.Center)
-            .borderRadius(18)
-            .linearGradient(this.tw(GlassLight.surface(Glass.PANEL_LIVE_BG, GlassTier.CARD, '', 1)))
-            .border({ width: 1, color: this.tw(GlassLight.borderColors(GlassTier.CARD, '', 1)) })
-            .onClick((): void => { this.next() })
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Center)
+            this.NavBtn(true)
           }
           .width('100%')
-          .height(240)
-
-          /* 底部页码小圆点（10 个，选中高亮） */
-          Row({ space: 4 }) {
-            ForEach(this.trees, (_t: TreeItem, idx: number) => {
-              Blank()
-                .width(idx === this.selectedIdx ? 16 : 6)
-                .height(6)
-                .borderRadius(3)
-                .backgroundColor(idx === this.selectedIdx ? this.tc(EcoTheme.primaryDeep(this.ecoLevel)) : this.tc(Neutral.TEXT_MUTED))
-                .animation({ duration: AppleMotion.MICRO_MS, curve: AppleMotion.IN })
-            }, (_t: TreeItem, idx: number): string => 'dot_' + idx.toString())
-          }
-          .width('100%')
-          .justifyContent(FlexAlign.Center)
+          .justifyContent(FlexAlign.SpaceBetween)
+          .margin({ top: Space.SM })
 
           Row({ space: Space.MD }) {
             Column({ space: 2 }) {
@@ -1146,22 +1103,22 @@ export struct TreePickerDialog {
     .height('100%')
   }
 
-  /** 单张卡片的「牌堆槽位」：按层计算位移/缩放/层级，flying 卡片覆盖为滑出态 */
+  /** 单张卡片槽位：以连续坐标驱动位移/缩放/透明度/层级；跟手时零延迟，回弹/按钮时按 animMs 过渡 */
   @Builder
   CardSlot(i: number) {
     Stack() {
-      this.CardOf(this.trees[i])
+      this.CardOf(this.trees[i], i)
     }
-    .translate({ x: this.slotX(i), y: this.slotY(i) })
-    .scale({ x: this.slotScale(i), y: this.slotScale(i) })
-    .opacity(this.slotOpacity(i))
-    .zIndex(this.slotZ(i))
-    .animation({ duration: 280, curve: Curve.EaseInOut })
+    .translate({ x: this.cxOf(i), y: 0 })
+    .scale({ x: this.scaleOf(i), y: this.scaleOf(i) })
+    .opacity(this.opacityOf(i))
+    .zIndex(this.zOf(i))
+    .animation(this.animMs === 0 ? { duration: 0 } : { duration: this.animMs, curve: Curve.EaseOut })
   }
 
-  /** 单张树卡片 Builder（牌堆共用） */
+  /** 单张树卡片 Builder（堆叠共用）；idx 用于显示该卡自身编号 i+1/10 */
   @Builder
-  CardOf(t: TreeItem) {
+  CardOf(t: TreeItem, idx: number) {
     Column({ space: Space.SM }) {
       Image($r('app.media.tree_icon'))
         .width(96)
@@ -1177,7 +1134,7 @@ export struct TreePickerDialog {
         .fontSize(FontSize.SMALL)
         .fontColor('rgba(255,255,255,0.85)')
         .maxLines(1)
-      Text((this.selectedIdx + 1) + ' / ' + this.trees.length)
+      Text((idx + 1) + ' / ' + this.trees.length)
         .fontSize(FontSize.CAPTION)
         .fontColor('rgba(255,255,255,0.7)')
         .margin({ top: 2 })
@@ -1189,5 +1146,26 @@ export struct TreePickerDialog {
     .border({ width: 1, color: this.tc(Accent.SUCCESS) })
     .borderRadius(Radius.LG)
     .shadow(this.tw(GlassLight.shadowOf(GlassTier.CARD)))
+  }
+
+  /** 左右切换按钮（上一个 / 下一个） */
+  @Builder
+  NavBtn(next: boolean) {
+    Column({ space: 2 }) {
+      Text(next ? '›' : '‹')
+        .fontSize(24)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.tc(Neutral.TEXT))
+      Text(next ? '下一个' : '上一个')
+        .fontSize(FontSize.CAPTION)
+        .fontColor(this.tc(Neutral.TEXT_SUB))
+    }
+    .width(64)
+    .height(64)
+    .justifyContent(FlexAlign.Center)
+    .borderRadius(18)
+    .linearGradient(this.tw(GlassLight.surface(Glass.PANEL_LIVE_BG, GlassTier.CARD, '', 1)))
+    .border({ width: 1, color: this.tw(GlassLight.borderColors(GlassTier.CARD, '', 1)) })
+    .onClick((): void => { this.go(next ? 1 : -1, true) })
   }
 }
