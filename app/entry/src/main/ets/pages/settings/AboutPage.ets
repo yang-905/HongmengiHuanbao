@@ -60,8 +60,8 @@ const KNOWLEDGE: KnowledgeItem[] = [
 ]
 
 /**
+
  * P30 关于
- * ------------------------------------------------------------------
  * 真实实现：应用 logo / 名称「一触青绿」/ 版本号 / 一句话介绍
  *          + 功能特性列表 + 碳足迹知识小科普 + 数据来源声明
  * 路由名：ABOUT（NavDestination，PageMap 集中注册）
@@ -83,22 +83,15 @@ export struct AboutPage {
   @StorageProp('themeTick') themeTick: number = 0
 
   private scroller: Scroller = new Scroller()
-
-  /* ---------- 交互 ---------- */
-
-  private checkUpdate(): void {
+private checkUpdate(): void {
     toast('已是最新版本 v' + APP_VERSION)
   }
 
   private openPolicy(): void {
     toast('隐私政策：数据仅存于你的设备与账号，不做广告用途')
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -109,6 +102,7 @@ export struct AboutPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -118,18 +112,7 @@ export struct AboutPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -141,6 +124,7 @@ export struct AboutPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -223,9 +207,7 @@ export struct AboutPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- Logo / 名称 / 版本 ---------- */
-  @Builder
+@Builder
   LogoBlock() {
     Column({ space: Space.MD }) {
       // 应用 Logo：主色渐变圆角块 + 品牌字形
@@ -295,9 +277,7 @@ export struct AboutPage {
     .borderRadius(Radius.LG)
     .shadow(this.tw(Shadow.card()))
   }
-
-  /* ---------- 功能特性 ---------- */
-  @Builder
+@Builder
   FeatureBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '功能特性' })
@@ -333,9 +313,7 @@ export struct AboutPage {
     .borderRadius(Radius.MD)
     .shadow(this.tw(Shadow.card()))
   }
-
-  /* ---------- 碳足迹小科普 ---------- */
-  @Builder
+@Builder
   KnowledgeBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '碳足迹小科普' })
@@ -372,9 +350,7 @@ export struct AboutPage {
     .padding({ bottom: Space.LG })
     .border({ width: { bottom: i < KNOWLEDGE.length - 1 ? 1 : 0 }, color: this.tc(Neutral.BORDER) })
   }
-
-  /* ---------- 数据与声明 ---------- */
-  @Builder
+@Builder
   DataBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '数据与声明' })

@@ -3,17 +3,8 @@ import { GlassLight, GlassTier } from '../ui/GlassLight';
 import { CfIcon } from '../ui/Icon';
 
 /**
+
  * P01 启动页（由 Index 条件渲染为全屏覆盖层，不占路由）
- * ------------------------------------------------------------------
- * 渐变背景 + 中心品牌 logo（实底圆盘 + 品牌圆环 + 叶片）+ 品牌名与 slogan
- * 点击任意处可跳过：作为定时器失效时的兜底，避免全屏遮挡导致无法交互
- *
- * 徽标为什么用实底而不是 CfGlassDisc 玻璃盘：
- *   CfGlassDisc 靠 backdropBlur 出磨砂感，而预览器下圆盘
- *   （clip + borderRadius + Stack 组合）的实时模糊会整盘渲染成纯黑，
- *   环和叶片全被吞掉；深色令牌 DISC_BG(0.10 白) 也偏暗。
- *   品牌徽标必须任何环境稳定可见 → 实底 + 圆环 + 紧致投影，
- *   深色模式同步换深色实底（ThemePalette 换血 Glass.DISC_SOLID_BG）。
  */
 @Component
 export struct SplashPage {

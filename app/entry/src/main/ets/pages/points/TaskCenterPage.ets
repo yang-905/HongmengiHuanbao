@@ -10,12 +10,8 @@ import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * P15 任务中心
- * ------------------------------------------------------------------
- * 真实实现：今日任务汇总卡（完成数 / 可领积分）+ 5 个任务卡
- *          任务卡含 图标 / 名称 / 描述 / 进度条 / 目标 / 奖励积分 / 状态
- *          已完成可点「领取」，点击弹 Toast 并把状态推进为已领取
- * 状态机：doing（进行中）→ done（待领取）→ claimed（已领取）
  */
 @Component
 export struct TaskCenterPage {
@@ -48,10 +44,7 @@ export struct TaskCenterPage {
       this.tasks = []
     }
   }
-
-  /* ---------- 口径 ---------- */
-
-  /** 任务完成度百分比 */
+/** 任务完成度百分比 */
   private pctOf(t: LocalTask): number {
     if (t.targetValue <= 0) return 0
     return Math.min(100, Math.round((t.progress / t.targetValue) * 100))
@@ -120,10 +113,7 @@ export struct TaskCenterPage {
     if (t.status === 'done') return this.tc(Accent.WARNING)
     return t.category.length > 0 ? this.tc(CategoryMeta.color(t.category)) : this.tc(EcoTheme.primary(this.ecoLevel))
   }
-
-  /* ---------- 交互：领取 ---------- */
-
-  private async claim(t: LocalTask): Promise<void> {
+private async claim(t: LocalTask): Promise<void> {
     if (t.status !== 'done') return
     /*
      * 真领取（2026-10-23 修复「点完还是待领取」）：
@@ -173,12 +163,8 @@ export struct TaskCenterPage {
   private openRecord(): void {
     AppRouter.pathStack.pushPathByName(RouteName.FACTOR_LIB, null)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -189,6 +175,7 @@ export struct TaskCenterPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -198,18 +185,7 @@ export struct TaskCenterPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -222,6 +198,7 @@ export struct TaskCenterPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -306,9 +283,7 @@ export struct TaskCenterPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 今日汇总 ---------- */
-  @Builder
+@Builder
   SummaryCard() {
     Column({ space: Space.LG }) {
       Row() {
@@ -366,9 +341,7 @@ export struct TaskCenterPage {
     .borderRadius(Radius.XL)
     .shadow(this.tw(Shadow.brand()))
   }
-
-  /* ---------- 统计三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -404,9 +377,7 @@ export struct TaskCenterPage {
     }
     .width('100%')
   }
-
-  /* ---------- 任务列表 ---------- */
-  @Builder
+@Builder
   TaskList() {
     Column({ space: Space.MD }) {
       CfSection({ title: '每日任务', more: '去记录 ›', onMoreTap: (): void => this.openRecord() })
@@ -418,9 +389,7 @@ export struct TaskCenterPage {
     }
     .width('100%')
   }
-
-  /* ---------- 单个任务卡 ---------- */
-  @Builder
+@Builder
   TaskCard(t: LocalTask) {
     Column({ space: Space.MD }) {
       Row({ space: Space.MD }) {

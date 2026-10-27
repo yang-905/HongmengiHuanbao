@@ -24,13 +24,8 @@ interface DayBillRow {
 }
 
 /**
+
  * P28 月度绿色账单
- * ------------------------------------------------------------------
- * 真实实现：账单头部（本月减排 / 积分 / 记录数 / 环比涨跌）
- *          + 四大类占比（条形 + 百分比）
- *          + 与上月对比（涨跌用绿/红语义色）
- *          + 每日明细简表（近 7 天）
- * 路由名：MONTH_BILL（NavDestination，PageMap 集中注册）
  */
 @Component
 export struct MonthBillPage {
@@ -72,10 +67,7 @@ export struct MonthBillPage {
       // DataSource 内部已兜底
     }
   }
-
-  /* ---------- 口径 ---------- */
-
-  /** 本月减排合计（四大类聚合口径） */
+/** 本月减排合计（四大类聚合口径） */
   private monthKg(): number {
     let sum: number = 0
     for (let i: number = 0; i < this.stats.length; i++) {
@@ -122,10 +114,7 @@ export struct MonthBillPage {
   private pctWidth(r: LocalRecord): string {
     return Math.max(2, this.pctOf(r)) + '%'
   }
-
-  /* ---------- 与上月对比 ---------- */
-
-  /** 上月合计减排：用近 7 天日均值 × 上月天数近似，保持口径可解释 */
+/** 上月合计减排：用近 7 天日均值 × 上月天数近似，保持口径可解释 */
   private lastMonthKg(): number {
     if (this.daily.length === 0) return 0
     let sum: number = 0
@@ -157,10 +146,7 @@ export struct MonthBillPage {
   private isUp(): boolean {
     return this.diffKg() >= 0
   }
-
-  /* ---------- 每日明细 ---------- */
-
-  /** 每日明细行（近 7 天，倒序：今天在最上） */
+/** 每日明细行（近 7 天，倒序：今天在最上） */
   private dayRows(): DayBillRow[] {
     const out: DayBillRow[] = []
     for (let i: number = this.daily.length - 1; i >= 0; i--) {
@@ -190,10 +176,7 @@ export struct MonthBillPage {
   private dayWidth(r: DayBillRow): string {
     return Math.max(3, Math.round((r.kg / this.dayMaxKg()) * 100)) + '%'
   }
-
-  /* ---------- 交互 ---------- */
-
-  private shareBill(): void {
+private shareBill(): void {
     toast('月度账单已生成（' + this.monthLabel() + ' 共减排 ' + this.monthKg() + ' kg）')
   }
 
@@ -208,12 +191,8 @@ export struct MonthBillPage {
     const m: number = d.getMonth() + 1
     return d.getFullYear() + ' 年 ' + m + ' 月'
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -224,6 +203,7 @@ export struct MonthBillPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -233,18 +213,7 @@ export struct MonthBillPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -257,6 +226,7 @@ export struct MonthBillPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -303,9 +273,7 @@ export struct MonthBillPage {
     }
     .hideTitleBar(true).opacity(this.themeTick >= 0 ? 1 : 0)
   }
-
-  /* ---------- 主体内容 ---------- */
-  @Builder
+@Builder
   BillContent() {
     Column() {
       CfTopBar({
@@ -357,9 +325,7 @@ export struct MonthBillPage {
     .border({ width: { top: 1 }, color: this.tc(EcoMood.edgeOf(this.ecoLevel)) })
     .animation({ duration: AppleMotion.THEME_MS, curve: AppleMotion.EASE })
   }
-
-  /* ---------- 账单头部 ---------- */
-  @Builder
+@Builder
   BillHead() {
     Column({ space: Space.LG }) {
       Row() {
@@ -416,9 +382,7 @@ export struct MonthBillPage {
     .borderRadius(Radius.XL)
     .shadow(this.tw(Shadow.brand()))
   }
-
-  /* ---------- 统计三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -454,9 +418,7 @@ export struct MonthBillPage {
     }
     .width('100%')
   }
-
-  /* ---------- 四大类占比 ---------- */
-  @Builder
+@Builder
   CategorySection() {
     Column({ space: Space.MD }) {
       CfSection({ title: '四大类占比', more: '查看分析 ›', onMoreTap: (): void => this.openReport() })
@@ -512,9 +474,7 @@ export struct MonthBillPage {
     }
     .width('100%')
   }
-
-  /* ---------- 与上月对比 ---------- */
-  @Builder
+@Builder
   CompareCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '与上月对比' })
@@ -588,9 +548,7 @@ export struct MonthBillPage {
     }
     .width('100%')
   }
-
-  /* ---------- 每日明细简表 ---------- */
-  @Builder
+@Builder
   DailySection() {
     Column({ space: Space.MD }) {
       CfSection({ title: '每日明细', more: '查看趋势 ›', onMoreTap: (): void => this.openReport() })
@@ -676,9 +634,7 @@ export struct MonthBillPage {
     .width('100%')
     .padding({ top: Space.SM, bottom: Space.SM })
   }
-
-  /* ---------- 底部操作 ---------- */
-  @Builder
+@Builder
   FooterAction() {
     Row() {
       Text('保存并分享本月账单')

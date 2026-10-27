@@ -10,12 +10,8 @@ import { Clipboard } from '../../utils/Clipboard';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * P29 家庭碳账户（创新拓展）
- * ------------------------------------------------------------------
- * 真实实现：家庭成员列表（头像/角色/设备/在线态/减排进度）
- *          + 家庭合计减排、合计积分、在线设备数
- *          + 跳转超级终端查看家庭设备
- * 路由名：FAMILY（NavDestination，PageMap 集中注册）
  */
 @Component
 export struct FamilyPage {
@@ -48,10 +44,7 @@ export struct FamilyPage {
       this.members = []
     }
   }
-
-  /* ---------- 合并统计 ---------- */
-
-  /** 家庭合计减排（kg） */
+/** 家庭合计减排（kg） */
   private familyKg(): number {
     let sum: number = 0
     for (let i: number = 0; i < this.members.length; i++) {
@@ -120,16 +113,13 @@ export struct FamilyPage {
     if (r === 2) return this.tc(Accent.TRAVEL)
     return this.tc(Accent.WARNING)
   }
-
-  /* ---------- 交互 ---------- */
-
-  private goTerminal(): void {
+private goTerminal(): void {
     AppRouter.pathStack.pushPathByName(RouteName.SUPER_TERMINAL, null)
   }
 
   /**
+
    * 邀请家人：把邀请文案写入系统剪贴板（真复制，见 Clipboard）。
-   * 不放虚构 URL / 假二维码（历史教训：不可达链接与空码都不可取）——
    * 文案引导家人从「我的 → 家庭账户」加入，信息真实可执行。
    */
   private invite(): void {
@@ -141,12 +131,8 @@ export struct FamilyPage {
       toast('复制失败，请重试')
     }
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -157,6 +143,7 @@ export struct FamilyPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -166,18 +153,7 @@ export struct FamilyPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -190,6 +166,7 @@ export struct FamilyPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -277,9 +254,7 @@ export struct FamilyPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 邀请按钮 ---------- */
-  @Builder
+@Builder
   InviteButton() {
     Row() {
       Text('邀请家人')
@@ -299,9 +274,7 @@ export struct FamilyPage {
     .width('100%')
     .padding({ left: 80, right: 80 })
   }
-
-  /* ---------- 家庭合计主卡 ---------- */
-  @Builder
+@Builder
   SummaryCard() {
     Column({ space: Space.MD }) {
       Row() {
@@ -357,9 +330,7 @@ export struct FamilyPage {
     .borderRadius(Radius.XL)
     .shadow(this.tw(Shadow.brand()))
   }
-
-  /* ---------- 合计三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -395,9 +366,7 @@ export struct FamilyPage {
     }
     .width('100%')
   }
-
-  /* ---------- 成员列表 ---------- */
-  @Builder
+@Builder
   MemberBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '家庭成员', more: '按减排排行 ›' })
@@ -469,9 +438,7 @@ export struct FamilyPage {
       toast(m.memberName + ' 累计减排 ' + Biz.formatKg(m.reduction))
     })
   }
-
-  /* ---------- 超级终端入口 ---------- */
-  @Builder
+@Builder
   TerminalEntry() {
     Row({ space: Space.MD }) {
       CfIcon({ kind: 'ui', code: 'device', iconSize: 26 })

@@ -21,6 +21,7 @@ import { ArticleCat, fmtRead } from './ArticleCat'
 import { AppleMotion } from '../../ui/AppleMotion';
 
 /**
+
  * 详情页路由参数：ArkTS 严格模式禁止无类型对象字面量
  */
 class ArticleDetailParam {
@@ -32,8 +33,8 @@ class ArticleDetailParam {
 }
 
 /**
+
  * P22 我的收藏
- * ------------------------------------------------------------------
  * 真实实现：收藏文章卡片流（样式对齐 ArticleListPage）+ 一键取消收藏
  * 取消后即时从列表移除并给出 toast 反馈
  * 路由名：FAVORITE_LIST（NavDestination，PageMap 集中注册）
@@ -89,10 +90,7 @@ export struct FavoriteListPage {
   private favList(): LocalArticle[] {
     return this.favs
   }
-
-  /* ---------- 交互 ---------- */
-
-  private openDetail(a: LocalArticle): void {
+private openDetail(a: LocalArticle): void {
     goWithParam(RouteName.ARTICLE_DETAIL, 'detailArticleId', a.articleId)
   }
 
@@ -125,12 +123,8 @@ export struct FavoriteListPage {
   private goList(): void {
     AppRouter.pathStack.pop()
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -141,6 +135,7 @@ export struct FavoriteListPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -150,18 +145,7 @@ export struct FavoriteListPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -174,6 +158,7 @@ export struct FavoriteListPage {
   }
 
   /**
+
    * 文章互动广播（详情页点赞/收藏、本页取消收藏都会 bump）。
    * 收藏列表据此自动重拉 —— 用户在详情页点了收藏，进本页立即看到。
    */
@@ -184,6 +169,7 @@ export struct FavoriteListPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -283,9 +269,7 @@ export struct FavoriteListPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 顶部统计条 ---------- */
-  @Builder
+@Builder
   SummaryBar() {
     Row() {
       Text('已收藏 ' + this.favList().length + ' 篇')
@@ -302,9 +286,7 @@ export struct FavoriteListPage {
     .backgroundColor(this.tc(EcoTheme.primaryPale(this.ecoLevel)))
     .borderRadius(Radius.MD)
   }
-
-  /* ---------- 收藏列表 ---------- */
-  @Builder
+@Builder
   ListBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '收藏的文章' })

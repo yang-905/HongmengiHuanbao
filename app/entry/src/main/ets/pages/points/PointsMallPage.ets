@@ -12,8 +12,8 @@ import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * P16 积分商城
- * ------------------------------------------------------------------
  * 真实实现：可用积分头卡 + 8 项权益网格（图标/名称/所需积分/描述）
  *          积分不足置灰（灰底 + 灰字 + 「还差 N 分」），可兑换的点击弹确认框
  */
@@ -56,15 +56,7 @@ export struct PointsMallPage {
   @State private exchangeAvailable: number = 0
   /**
    * 入场 / 退场定时器（必须分开，不能共用一个字段）。
-   * ------------------------------------------------------------------
-   * ⚠️ 曾经共用一个 exchangeTimer，用户反馈「点击取消后再开有概率卡死」。
-   *   根因：openExchange 与 closeExchange 都先 clearExchangeTimer()，
-   *   两个定时器互相清对方 —— 退场的 200ms 卸载定时器被入场清掉后，
-   *   弹窗永远留在场上（遮罩还在吃点击，看起来就是「卡住」）；
-   *   反之入场的 16ms 定时器被退场清掉，exchangeIn 永远为 false，
-   *   面板挂在场上却是透明的，用户再点「去兑换」全被遮罩吞掉。
-   *   分成两个字段后，两个方向的定时器互不干扰。
-   */
+ */
   private exchangeEnterTimer: number = -1
   private exchangeExitTimer: number = -1
   /**
@@ -100,17 +92,9 @@ export struct PointsMallPage {
   }
 
   /**
+
    * 打开兑换确认弹窗（覆盖层）。
-   * ------------------------------------------------------------------
-   * 时序分两帧：先挂载（showExchange=true），延后 16ms 再置 exchangeIn
-   * 起入场动画 —— 同一帧内 0→1 会被框架合并，opacity/scale 动画不播
-   * （同 Index slotDeleteIn 手法）。
-   *
-   * ⚠️ 退场中的重开：若上一次关闭的 200ms 退场定时器还挂着，必须先清掉
-   *   （否则弹窗刚入场就被退场定时器卸载 → 用户看到「点了没反应」）。
-   *   同时把 exchangeIn 先复位成 false，保证「关→开」这一轮入场动画
-   *   也能重新播（否则 true→true 无变化，动画不触发）。
-   */
+ */
   private openExchange(b: LocalBenefit): void {
     this.clearExchangeTimers()
     this.exchangeBenefit = b
@@ -124,6 +108,7 @@ export struct PointsMallPage {
   }
 
   /**
+
    * 关闭兑换确认弹窗：先置 false 播 200ms 退场，再卸载。
    * ⚠️ 不清入场定时器之外的东西；退场定时器独立于入场定时器，
    *   避免「关→开」时入场的 16ms 定时器被退场逻辑误清。
@@ -141,9 +126,8 @@ export struct PointsMallPage {
   }
 
   /**
+
    * 数字滚动动画：把「可用积分」从旧值滚到新值。
-   * ------------------------------------------------------------------
-   * 用户反馈「再兑换后这里的数据刷新也没动画」——数字直接跳变。
    * 现在用 24 帧 × 16ms ≈ 380ms 的缓动滚动，视觉上是平滑过渡。
    * 数值本身由 ov.availablePoints 提供，shownPoints 只是显示中间值。
    */
@@ -195,10 +179,7 @@ export struct PointsMallPage {
       this.benefits = []
     }
   }
-
-  /* ---------- 口径 ---------- */
-
-  /** 是否可兑换 */
+/** 是否可兑换 */
   private affordable(b: LocalBenefit): boolean {
     return this.ov.availablePoints >= b.points
   }
@@ -225,10 +206,7 @@ export struct PointsMallPage {
     }
     return m
   }
-
-  /* ---------- 交互 ---------- */
-
-  private tapBenefit(b: LocalBenefit): void {
+private tapBenefit(b: LocalBenefit): void {
     if (!this.affordable(b)) {
       toast('积分不足，还差 ' + this.gapOf(b) + ' 分，继续低碳记录吧')
       return
@@ -239,19 +217,9 @@ export struct PointsMallPage {
   }
 
   /**
+
    * 确认兑换（弹窗「确定兑换」的落地点）。
-   * ------------------------------------------------------------------
-   * 事务口径：LocalStore.exchange 内部已做余额校验 + 发券 + best-effort 落盘，
-   * 返回 null 只可能是「弹窗停留期间积分被其他入口用掉」—— toast 兜底并重拉。
-   * 成功后两个广播都要发：
-   *   · bumpCouponTick —— 券包页列表、「我的」页入口角标据此刷新；
-   *   · broadcastDataChange —— 可用积分余额是跨页共享状态，常驻 Tab 页
-   *     （我的/首页）经 ecoTick 重拉，否则回来看到旧余额。
-   *
-   * ⚠️ 整体 try/catch：弹窗 onConfirm 是火忘调用（无 await），本方法一旦
-   * throw 就是未捕获 rejection —— 预览器直接判预览错误弹红条、真机
-   * 也可能静默失败。任何异常统一降级为「兑换未完成」toast。
-   */
+ */
   private async doExchange(b: LocalBenefit): Promise<void> {
     try {
       const cp: LocalCoupon | null = await LocalStore.exchange(b)
@@ -276,12 +244,8 @@ export struct PointsMallPage {
   private openRecord(): void {
     AppRouter.pathStack.pushPathByName(RouteName.FACTOR_LIB, null)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -292,6 +256,7 @@ export struct PointsMallPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -301,18 +266,7 @@ export struct PointsMallPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -325,6 +279,7 @@ export struct PointsMallPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -427,9 +382,7 @@ export struct PointsMallPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 顶部余额卡 ---------- */
-  @Builder
+@Builder
   HeaderCard() {
     Column({ space: Space.LG }) {
       Row() {
@@ -501,9 +454,7 @@ export struct PointsMallPage {
     }
     return m
   }
-
-  /* ---------- 统计三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -539,9 +490,7 @@ export struct PointsMallPage {
     }
     .width('100%')
   }
-
-  /* ---------- 权益网格 ---------- */
-  @Builder
+@Builder
   MallGrid() {
     Column({ space: Space.MD }) {
       CfSection({ title: '碳普惠权益', more: '看徽章 ›', onMoreTap: (): void => this.openBadge() })
@@ -597,9 +546,7 @@ export struct PointsMallPage {
     for (let i: number = used; i < PointsMallPage.COLS; i++) out.push(i);
     return out;
   }
-
-  /* ---------- 单项权益卡 ---------- */
-  @Builder
+@Builder
   BenefitCell(b: LocalBenefit) {
     Column({ space: 7 }) {
       Row() {
@@ -668,9 +615,7 @@ export struct PointsMallPage {
     .clip(true)
     .onClick((): void => this.tapBenefit(b))
   }
-
-  /* ---------- 兑换说明 ---------- */
-  @Builder
+@Builder
   TipCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '兑换说明' })

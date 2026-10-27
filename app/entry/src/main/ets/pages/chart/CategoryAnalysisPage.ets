@@ -17,13 +17,8 @@ interface RangeTab {
 }
 
 /**
+
  * P11 分类占比
- * ------------------------------------------------------------------
- * 真实实现：周期切换 + 100% 堆叠占比条（四大类分段着色）
- *          + 每类的环形指标徽标 / 减排 kg / 占比% / 记录数
- * 说明：ArkUI 不支持 conic-gradient，这里用「Row 叠加 + 百分比宽度」
- *      拼出分段占比条，再配合每类的圆形占比徽标与横向进度条呈现，
- *      视觉等价于环形图且零依赖。
  */
 @Component
 export struct CategoryAnalysisPage {
@@ -50,9 +45,7 @@ export struct CategoryAnalysisPage {
    */
   @State private loading: boolean = true
   /**
-   * 切换轨道实测宽度（vp）。
    * 药丸宽度必须与文字槽位严格同宽，否则滑过去会错位。
-   * 依赖屏幕尺寸与页面 padding，用 onAreaChange 实测而非写死。
    */
   @State private rangeTrackW: number = 0
 
@@ -83,10 +76,7 @@ export struct CategoryAnalysisPage {
     // 「近 7 天 / 近 90 天」两个周期就完全点不动。
     this.loading = false
   }
-
-  /* ---------- 统计口径 ---------- */
-
-  /** 四大类减排合计 */
+/** 四大类减排合计 */
   private totalKg(): number {
     let s: number = 0
     for (let i = 0; i < this.stats.length; i++) s += this.stats[i].reduceKg
@@ -142,7 +132,8 @@ export struct CategoryAnalysisPage {
   }
 
   /**
- * 周期切换。
+
+   * 周期切换。
  * days 的赋值放进 animateTo 闭包，药丸的 translate / 文字的 scale
  * 会在同一帧内做属性动画，读起来是「药丸滑过去 + 文字轻轻放大」，
  * 而非瞬间跳变（与 TrendChartPage.load 同思路）。
@@ -159,12 +150,8 @@ export struct CategoryAnalysisPage {
   private openTrend(): void {
     AppRouter.pathStack.pushPathByName(RouteName.TREND_CHART, null)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -175,6 +162,7 @@ export struct CategoryAnalysisPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -184,18 +172,7 @@ export struct CategoryAnalysisPage {
   /** 记录信号变化 → 重算全局碳档位 + 按当前周期重拉数据 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -208,6 +185,7 @@ export struct CategoryAnalysisPage {
   }
 
   /**
+
    * 按当前统计周期重新拉取占比数据。
    * load() 需要周期参数，不能直接当无参重载调用，故单独包一层。
    */
@@ -216,6 +194,7 @@ export struct CategoryAnalysisPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -301,20 +280,9 @@ export struct CategoryAnalysisPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 周期切换（液态玻璃滑动分段控件） ---------- */
-
-  /**
-   * 周期分段控件：滑动药丸 + 液态玻璃
-   * ------------------------------------------------------------------
-   * 参照 `TrendChartPage.TabBar()` 的同一套做法：
-   *   · 选中态是一块**独立图层**用 translate 平移过去，读起来是「滑」不是「闪」；
-   *   · 药丸宽度与文字槽位严格同宽（onAreaChange 实测轨道宽），否则滑过去错位；
-   *   · 药丸挂 backdropBlur + 档位高光描边 = 液态玻璃，
-   *     且同区域只挂一层模糊（见 Theme.ets Glass.LIVE_BLUR 性能说明）。
-   *
-   * 药丸是 HitTestMode.None，点击由文字层承接。
-   */
+/**
+ * 周期分段控件：滑动药丸 + 液态玻璃
+ */
   @Builder
   RangeBar() {
     Stack({ alignContent: Alignment.Start }) {
@@ -425,9 +393,7 @@ export struct CategoryAnalysisPage {
     }
     return 0
   }
-
-  /* ---------- 占比总览：100% 堆叠条 + 环形指标 ---------- */
-  @Builder
+@Builder
   RatioCard() {
     Column({ space: Space.LG }) {
       Row() {
@@ -498,9 +464,7 @@ export struct CategoryAnalysisPage {
     .borderRadius(Radius.XL)
     .shadow(this.tw(Shadow.brand()))
   }
-
-  /* ---------- 统计三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -536,9 +500,7 @@ export struct CategoryAnalysisPage {
     }
     .width('100%')
   }
-
-  /* ---------- 分类明细 ---------- */
-  @Builder
+@Builder
   CategoryList() {
     Column({ space: Space.MD }) {
       CfSection({ title: '分类明细', more: '看趋势 ›', onMoreTap: (): void => this.openTrend() })

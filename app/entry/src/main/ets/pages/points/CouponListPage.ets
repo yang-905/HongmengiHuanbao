@@ -10,20 +10,8 @@ import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * P34 碳惠券包
- * ------------------------------------------------------------------
- * 「我的 → 证书夹」下的二级菜单：集中存放积分商城兑换的权益券。
- * 页面结构：概览大卡（可用/已使用/已过期 + 累计消耗）
- *          + 券卡列表（三段式票券视觉，见 ui/GlassDialog.CouponTicketView）
- *          + 空态引导去积分商城兑换
- *
- * 两条易错点（写错即静默失效）：
- *   ① 券变更必须订阅 couponTick：兑换/核销在 LocalStore 里 bump 该信号，
- *      本页据此重拉；只依赖 aboutToAppear 会导致「兑完回来列表不更新」。
- *   ② 券详情弹窗走**覆盖层范式**（普通 @Component + 宿主 Stack 挂载，
- *      不是 @CustomDialog —— 预览器原生崩溃，见 ui/GlassDialog 文件头）：
- *      宿主持 showDetail/detailIn/detailCoupon 三态，打开先挂载再延一帧
- *      起入场动画，关闭先播退场再卸载（openDetail/closeDetail）。
  */
 @Component
 export struct CouponListPage {
@@ -44,6 +32,7 @@ export struct CouponListPage {
   @State private loading: boolean = true
 
   /**
+
    * 券详情弹窗（覆盖层范式，非 @CustomDialog —— 预览器原生崩溃，见
    * ui/GlassDialog 文件头）。宿主只出三样：挂载开关 showDetail、动画
    * 闸门 detailIn、当前券；打开/关闭时序见 openDetail/closeDetail。
@@ -57,13 +46,7 @@ export struct CouponListPage {
   }
   /**
    * 入场/退场延时定时器（-1 = 无；关闭时先播退场再卸载）。
-   * ⚠️ 必须拆成两个字段：原先 open/close 共用一个 detailTimer，
-   * 且都先 clearDetailTimer() → 入场 16ms 与退场 200ms 互相清除：
-   *   · 退场定时器被入场清掉 → 弹窗永久留在场上，遮罩继续吃点击（卡死）；
-   *   · 入场定时器被退场清掉 → detailIn 永为 false，面板透明挂场、
-   *     遮罩仍在 → 再点也是「卡住」。
-   * 同 PointsMallPage.exchangeEnterTimer/exchangeExitTimer。
-   */
+ */
   private detailEnterTimer: number = -1
   private detailExitTimer: number = -1
 
@@ -91,13 +74,9 @@ export struct CouponListPage {
   }
 
   /**
+
    * 打开券详情弹窗（覆盖层；使用成功后经 onUsed 回调重拉列表）。
-   * ------------------------------------------------------------------
-   * 时序分两帧：先挂载（showDetail=true），延后 16ms 再置 detailIn
-   * 起入场动画 —— 同一帧内 0→1 会被框架合并，动画不播（同 Index
-   * slotDeleteIn 手法）。qrContent 态活在弹窗组件内，卸载即重置，
-   * 不会把上次的核销码带给下一张券。
-   */
+ */
   private openDetail(c: LocalCoupon): void {
     // 已核销的券不再开详情弹窗（弹窗只剩 unused/expired 两种态）：
     // 核销凭证已独立成页（P35），直接进入回看
@@ -108,7 +87,6 @@ export struct CouponListPage {
     this.clearDetailTimers()
     this.detailCoupon = c
     // 先复位动画闸门：关→开 时若 detailIn 仍为 true，0→1 不会触发，
-    // 面板会「直接出现」而没有入场动画（用户反馈：点开关闭没有动画）。
     this.detailIn = false
     this.showDetail = true
     this.detailEnterTimer = setTimeout((): void => {
@@ -137,10 +115,7 @@ export struct CouponListPage {
       this.coupons = []
     }
   }
-
-  /* ---------- 口径 ---------- */
-
-  /** 可用券数（未使用且未过期） */
+/** 可用券数（未使用且未过期） */
   private unusedCount(): number {
     return this.countOf('unused')
   }
@@ -171,14 +146,12 @@ export struct CouponListPage {
     }
     return n
   }
-
-  /* ---------- 交互 ---------- */
-
-  private openMall(): void {
+private openMall(): void {
     AppRouter.pathStack.pushPathByName(RouteName.POINTS_MALL, null)
   }
 
   /**
+
    * 进入核销凭证页（P35）。
    * 券号是 string，goWithParam 只支持 number —— 走 AppStorage string 键
    * 传参（⚠️ setOrCreate：对不存在的键 set 是静默 no-op），
@@ -188,11 +161,8 @@ export struct CouponListPage {
     AppStorage.setOrCreate<string>('redeemCouponId', couponId)
     AppRouter.pathStack.pushPathByName(RouteName.COUPON_REDEEM, null)
   }
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -203,6 +173,7 @@ export struct CouponListPage {
   }
 
   /**
+
    * 券变更信号（响应式）。
    * 兑换成功 / 核销成功 / 切账号都会在 LocalStore.bumpCouponTick 里 +1，
    * 本页据此重拉 —— 「兑完券回来列表立刻多一张」靠的就是它。
@@ -215,6 +186,7 @@ export struct CouponListPage {
   }
 
   /**
+
    * 记录变更信号（响应式）：只重算碳档位、**不重拉券**。
    * 券是兑换产生的落盘资产，与行为记录无关；ecoTick 到这里只为
    * 保证「记完一笔切回来背景立刻变色」（档位由 EcoMoodState 重算）。
@@ -226,6 +198,7 @@ export struct CouponListPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -340,10 +313,8 @@ export struct CouponListPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 概览大卡 ---------- */
-  /**
-   * 概览卡：左「可用 N 张」大数字 + 右侧「已使用 / 已过期」两组指标。
+/**
+ * 概览卡：左「可用 N 张」大数字 + 右侧「已使用 / 已过期」两组指标。
    * 排版口径同证书夹概览卡：大数字必须给宽度约束（flexShrink(0)），
    * 否则按内容撑开把右侧指标挤出卡片右缘。
    */
@@ -422,9 +393,7 @@ export struct CouponListPage {
     .layoutWeight(1)
     .constraintSize({ minWidth: 0 })
   }
-
-  /* ---------- 券列表 ---------- */
-  @Builder
+@Builder
   CouponSection() {
     Column({ space: Space.MD }) {
       CfSection({ title: '我的券', more: '去商城 ›', onMoreTap: (): void => this.openMall() })
@@ -440,7 +409,6 @@ export struct CouponListPage {
           })
           // ⚠️ 键必须掺动态状态：纯 couponId 是稳定键，核销后键不变，
           // ArkUI 复用旧子树 —— 统计卡已刷新、票面却停留「N 天后失效」
-          // 不变灰（2026-10-21 用户反馈，同 MinePage 角标冻结实锤）。
           // 掺 status/expired 后键随状态变化 → 旧子树销毁重建，票面即变。
         }, (c: LocalCoupon): string => c.couponId + '-' + LocalStore.couponStatus(c))
       }
@@ -448,9 +416,7 @@ export struct CouponListPage {
     }
     .width('100%')
   }
-
-  /* ---------- 空态操作 ---------- */
-  @Builder
+@Builder
   EmptyAction() {
     Row() {
       Text('去积分商城兑换')
@@ -469,9 +435,7 @@ export struct CouponListPage {
     .width('100%')
     .onClick((): void => this.openMall())
   }
-
-  /* ---------- 底部提示 ---------- */
-  @Builder
+@Builder
   TipCard() {
     Row({ space: Space.MD }) {
       CfIcon({

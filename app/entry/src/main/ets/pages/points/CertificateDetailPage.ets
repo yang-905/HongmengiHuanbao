@@ -15,12 +15,8 @@ interface CertificateDetailParam {
 }
 
 /**
+
  * P20 证书详情（电子证书）
- * ------------------------------------------------------------------
- * 真实实现：绿色渐变边框的「电子证书」版面
- *          编号（等宽，防重号）/ 树种 / 棵数 / 颁发日期 / 持有人
- *          + 印章区 + 环保说明 + 底部分享与保存
- * 路由名：CERTIFICATE_DETAIL（NavDestination，PageMap 集中注册）
  */
 @Component
 export struct CertificateDetailPage {
@@ -77,10 +73,7 @@ export struct CertificateDetailPage {
       this.cert = null
     }
   }
-
-  /* ---------- 交互 ---------- */
-
-  /** 分享：调用系统分享面板（演示环境给出轻提示） */
+/** 分享：调用系统分享面板（演示环境给出轻提示） */
   private shareCert(): void {
     if (this.cert === null) return
     toast('已生成证书「' + this.cert!.treeType + '」分享卡，去分享给好友吧')
@@ -111,12 +104,8 @@ export struct CertificateDetailPage {
   private openMall(): void {
     AppRouter.pathStack.pushPathByName(RouteName.POINTS_MALL, null)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -127,6 +116,7 @@ export struct CertificateDetailPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -136,18 +126,7 @@ export struct CertificateDetailPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -160,6 +139,7 @@ export struct CertificateDetailPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -205,9 +185,7 @@ export struct CertificateDetailPage {
     }
     .hideTitleBar(true).opacity(this.themeTick >= 0 ? 1 : 0)
   }
-
-  /* ---------- 主体内容 ---------- */
-  @Builder
+@Builder
   DetailContent() {
     Column() {
       CfTopBar({
@@ -257,9 +235,7 @@ export struct CertificateDetailPage {
     .border({ width: { top: 1 }, color: this.tc(EcoMood.edgeOf(this.ecoLevel)) })
     .animation({ duration: AppleMotion.THEME_MS, curve: AppleMotion.EASE })
   }
-
-  /* ---------- 电子证书主体：绿色渐变边框 ---------- */
-  @Builder
+@Builder
   Certificate() {
     Column() {
       // 内层白底，外层用渐变做描边，形成"电子证书"质感边框
@@ -283,9 +259,7 @@ export struct CertificateDetailPage {
     .borderRadius(Radius.XL)
     .shadow(this.tw(Shadow.brand()))
   }
-
-  /* ---------- 证书抬头 ---------- */
-  @Builder
+@Builder
   CertHead() {
     Column({ space: Space.SM }) {
       CfIcon({ kind: 'ui', code: 'tree', iconSize: 40 })
@@ -309,9 +283,7 @@ export struct CertificateDetailPage {
     .width('100%')
     .alignItems(HorizontalAlign.Center)
   }
-
-  /* ---------- 证书编号 ---------- */
-  @Builder
+@Builder
   CertNo() {
     Column({ space: 5 }) {
       Text('证书编号')
@@ -338,9 +310,7 @@ export struct CertificateDetailPage {
     .backgroundColor(this.tc(EcoTheme.primaryPale(this.ecoLevel)))
     .borderRadius(Radius.MD)
   }
-
-  /* ---------- 证书正文：字段网格 ---------- */
-  @Builder
+@Builder
   CertBody() {
     Column({ space: Space.LG }) {
       this.InfoLine('持有人', this.cert!.ownerName, true)
@@ -373,9 +343,7 @@ export struct CertificateDetailPage {
     .padding({ bottom: Space.SM })
     .border({ width: { bottom: 1 }, color: this.tc(Neutral.BORDER) })
   }
-
-  /* ---------- 印章 ---------- */
-  @Builder
+@Builder
   CertSeal() {
     Row() {
       Column({ space: 3 }) {
@@ -411,9 +379,7 @@ export struct CertificateDetailPage {
     .backgroundColor(this.tc(Accent.SUCCESS_BG))
     .borderRadius(Radius.MD)
   }
-
-  /* ---------- 证书说明 ---------- */
-  @Builder
+@Builder
   CertNote() {
     CfCard({ pad: Space.LG }) {
       Column({ space: Space.MD }) {
@@ -442,9 +408,7 @@ export struct CertificateDetailPage {
     }
     .width('100%')
   }
-
-  /* ---------- 底部操作 ---------- */
-  @Builder
+@Builder
   ActionBar() {
     Column({ space: Space.MD }) {
       Row({ space: Space.MD }) {

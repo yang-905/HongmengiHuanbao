@@ -1,11 +1,5 @@
 /**
  * 文章分类元信息与阅读数格式化（三页共用）
- * ------------------------------------------------------------------
- * 原 ArticleListPage / ArticleDetailPage / FavoriteListPage 各自重复定义了
- * ArticleCat（label/emoji/bg/fg）与 fmtRead（阅读数折算），三处实现一致，
- * 抽取到本模块统一维护（emoji 仅列表页筛选 chip 使用，一并纳入）。
- * 注意：文章分类（policy/concept/tips）与四大类行为分类
- * （travel/energy/recycle/food）是两套体系，切勿混用 CategoryMeta。
  */
 import { Accent, Brand } from '../../ui/Theme'
 

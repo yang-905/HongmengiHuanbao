@@ -1,19 +1,5 @@
 /**
  * 登录 / 注册闸门（未登录时整屏唯一可见内容，由 Index 根 Stack 条件渲染）
- * ------------------------------------------------------------------
- * 非路由页面（不进 NavPathStack）：会话态由 AccountStore 写 AppStorage
- * ('sessionUser')，Index 闸门监听后自动挂载主框架，本组件随之退场。
- *
- * 规则（用户要求）：
- *   · 账号不能为空（trim 后非空、不含空格、≤20 字符）
- *   · 密码 = 8 位、仅字母和数字、须同时包含字母与数字
- *   · 注册成功自动登录；登录页提供已注册账号快捷预填 chips
- *     （同一台设备上切换账号 = 注销后在这里点另一个账号，数据互不冲突）
- *
- * 视觉：与全应用同一套「碳情绪 + 液态玻璃」语言 ——
- *   实色底（bgSolid）+ 顶部档位色径向光晕 + 玻璃卡 + 品牌渐变主按钮。
- *   ⚠️ 所有 static 取色点必须经 tc() 包裹建立 themeTick 依赖，
- *   否则深色换血后本页停留浅色套值（全库既有踩坑，见 Components.ets）。
  */
 import { Toast, toast } from '../../ui/Toast'
 import { AccountStore } from '../../data/AccountStore'
@@ -77,10 +63,7 @@ export struct LoginGate {
     await AccountStore.init()
     this.knownUsers = AccountStore.accountNames()
   }
-
-  /* ---------- 交互 ---------- */
-
-  private switchMode(m: string): void {
+private switchMode(m: string): void {
     if (this.mode === m) return
     this.mode = m
     this.err = ''
@@ -93,15 +76,12 @@ export struct LoginGate {
     this.err = ''
     const isReg: boolean = this.mode === MODE_REGISTER
     /*
-     * ⚠️ 注册意图标记必须落 在 await register() **之前**（用户反馈：
      * 「注册成功后信息录入页比主页面慢，手快能点到子页面」）。
-     *
      * register() 内部最后一步是 setSession() → AppStorage.setOrCreate
      * ('sessionUser') → 立刻同步触发 Index 的 @Watch onSessionUser →
      * Index 重建、主框架挂载。也就是说：**onSessionUser 触发时刻，
      * 标记必须已经在位**，否则 Index 读不到「本次是注册」，就没法在
      * 主框架第一帧预置闸门（空窗期又露出来了）。
-     *
      * 两个标记分工：
      *   · profileSetupIntent —— 只给 Index.onSessionUser 读，触发闸门
      *     预置，onSessionUser 里消费即清（一次性）；
@@ -150,10 +130,7 @@ export struct LoginGate {
     this.user = u
     this.err = ''
   }
-
-  /* ---------- 输入框通用样式 ---------- */
-
-  private fieldBorder(focused: boolean): string {
+private fieldBorder(focused: boolean): string {
     if (focused) return this.tc(InputField.focusBorder(ThemePalette.dark))
     return this.tc(InputField.border(ThemePalette.dark))
   }

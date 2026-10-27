@@ -31,8 +31,8 @@ interface QuickEntry {
 }
 
 /**
+
  * P13 积分首页
- * ------------------------------------------------------------------
  * 真实实现：积分余额大卡（渐变）+ 可用/累计获得/累计兑换三项统计
  *          + 四个快捷入口（流水/商城/证书/徽章）+ 积分规则说明
  */
@@ -64,14 +64,8 @@ export struct PointsHomePage {
   private scroller: Scroller = new Scroller()
 
   /**
- * 四个快捷入口。
- *
- * ⚠️ 这里**不能用** EcoTheme.xxx(this.ecoLevel)：
- *   字段初始化早于 @StorageProp 赋值，编译报
- *   "Property 'ecoLevel' is used before its initialization"。
- *   快捷入口是**静态清单**，入口色属于固定语义色（各入口本就有自己的
- *   主题色：流水=绿、商城=琥珀、证书=蓝、徽章=绿），
- *   不应跟随碳档位变化 —— 这里恢复为固定色。
+
+   * 四个快捷入口。
  */
   private entries: QuickEntry[] = [
     { icon: 'certificate', label: '积分流水', route: RouteName.POINTS_RECORD, color: this.tc(Brand.PRIMARY_DEEP), tint: this.tc(Brand.PRIMARY_PALE) },
@@ -91,11 +85,8 @@ export struct PointsHomePage {
       // DataSource 内部已兜底
     }
   }
-
-  /* ---------- 口径 ---------- */
-
-  /**
-   * 累计兑换（取券流水精确累加值）。
+/**
+ * 累计兑换（取券流水精确累加值）。
    * ⚠️ 曾用 totalPoints − availablePoints 反推：可用积分改成持久化余额后，
    *   删记录砸到 0 的超出部分被抹平，反推值会小于真实兑换消耗，
    *   与券包里躺着的券对不上。现直接取 ov.exchangedPoints（见 LocalOverview）。
@@ -105,6 +96,7 @@ export struct PointsHomePage {
   }
 
   /**
+
    * 下一棵树的兑换进度（3000 分一棵）。
    * ⚠️ 口径修正：可用积分现已是**真实余额**（不再被树的折算扣减），
    *   进度必须从「累计获得 mod POINTS_PER_TREE」取 —— 若仍用 availablePoints/POINTS_PER_TREE，
@@ -127,10 +119,7 @@ export struct PointsHomePage {
   private openTask(): void {
     AppRouter.pathStack.pushPathByName(RouteName.TASK_CENTER, null)
   }
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /** 全局碳情绪档位（响应式，AppStorage 驱动） */
+/** 全局碳情绪档位（响应式，AppStorage 驱动） */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
 
   /** 记录变更信号：写入记录后立即重算档位 */
@@ -139,18 +128,7 @@ export struct PointsHomePage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -168,6 +146,7 @@ export struct PointsHomePage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -252,9 +231,7 @@ export struct PointsHomePage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 积分余额大卡 ---------- */
-  @Builder
+@Builder
   BalanceCard() {
     Column({ space: Space.LG }) {
       Row() {
@@ -342,9 +319,7 @@ export struct PointsHomePage {
     .layoutWeight(1)
     .onClick((): void => this.go(route))
   }
-
-  /* ---------- 统计三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -380,9 +355,7 @@ export struct PointsHomePage {
     }
     .width('100%')
   }
-
-  /* ---------- 兑换进度 ---------- */
-  @Builder
+@Builder
   TreeCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '积分兑换进度' })
@@ -418,9 +391,7 @@ export struct PointsHomePage {
     }
     .width('100%')
   }
-
-  /* ---------- 快捷入口网格 ---------- */
-  @Builder
+@Builder
   QuickGrid() {
     Column({ space: Space.MD }) {
       CfSection({ title: '积分去哪用' })
@@ -497,9 +468,7 @@ export struct PointsHomePage {
     for (let i: number = used; i < PointsHomePage.COLS; i++) out.push(i);
     return out;
   }
-
-  /* ---------- 任务提示 ---------- */
-  @Builder
+@Builder
   TaskTip() {
     Row({ space: Space.MD }) {
       CfIcon({ kind: 'ui', code: 'target', iconSize: 22 })
@@ -524,9 +493,7 @@ export struct PointsHomePage {
     .borderRadius(Radius.MD)
     .onClick((): void => this.openTask())
   }
-
-  /* ---------- 积分规则 ---------- */
-  @Builder
+@Builder
   RuleCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '积分规则' })

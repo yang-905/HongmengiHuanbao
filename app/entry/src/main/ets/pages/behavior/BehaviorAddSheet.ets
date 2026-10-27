@@ -1,11 +1,5 @@
 /**
  * P07 行为录入面板（中央＋/右下＋唤起，半模态）
- * bindSheet 半模态面板，不占路由；由 Index 统一挂载
- *
- * 单机版数据流（不使用云服务器）：
- * - 因子来源 MockStore.factors()（源项目 27 项，与后端种子一致）
- * - 提交直接写入 LocalStore（Preferences 持久化），刷新即可见
- * - 试算口径与业务一致：减排 kg = 数量 × 因子，积分 = round(kg×10) 且最低 1 分
  */
 import { toast } from '../../ui/Toast'
 import { DataSource } from '../../net/DataSource'
@@ -49,6 +43,7 @@ export struct BehaviorAddSheet {
   }
 
   /**
+
    * 接收因子库/AI 识别带入的预选项：
    * 以 AppStorage 的 presetItemId 为准，命中则切到该因子所属分类并选中。
    * 消费后立即清空，避免下次打开面板被上一次选择污染。
@@ -125,12 +120,9 @@ export struct BehaviorAddSheet {
   }
 
   /**
+
    * 占位提示文案。
-   * ⚠️ 旧版是「请输入步行出行数量」——把已选中的因子名又重复了一遍，
-   *   占位文字长且啰嗦，反而更难一眼扫到。现改成
-   *   **只给单位**（「输入公里数」）：因子名就在上方选中项里，
-   *   单位才是输入时真正缺的信息，重复因子名是噪音。
-   */
+ */
   private placeholderText(): string {
     const f: LocalFactor | undefined = this.findSelected()
     if (f === undefined) return '请输入数值'
@@ -138,6 +130,7 @@ export struct BehaviorAddSheet {
   }
 
   /**
+
    * 提交：写入本地库（单机版核心）。
    * 写入后通过 AppStorage 打一个标记，列表页 onPageShow 时据此自动刷新。
    */
@@ -183,10 +176,7 @@ export struct BehaviorAddSheet {
       this.submitting = false
     }
   }
-
-  /* ---------- 动态碳主题（与页面背景同步） ---------- */
-
-  /** 全局碳情绪档位（响应式，AppStorage 驱动） */
+/** 全局碳情绪档位（响应式，AppStorage 驱动） */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
 
   /** 记录变更信号 */
@@ -195,18 +185,7 @@ export struct BehaviorAddSheet {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -387,22 +366,8 @@ export struct BehaviorAddSheet {
         .width('100%')
 
         /*
-         * 数量输入（用户反馈「不明显，用户无法一眼看见这里输入数值」）
-         * ------------------------------------------------------------------
-         * 取证（截图逐像素 + WCAG 反解）显示旧版是**双重失效**：
-         *   placeholder / 输入框底 = 1.09:1   （需 ≥4.5，几乎完全隐形）
-         *   "数量"标签 / 面板底   = 1.06:1   （同样隐形）
-         *   输入框底 / 面板底     = 2.90:1   （框体轮廓勉强可见）
-         * 根因：旧代码只写了 `.backgroundColor(Neutral.SURFACE)` ——
-         * 既没有描边，也没设 placeholderColor，而 ArkUI 的 placeholder
-         * 默认取系统灰，在米色底和深色底上都看不见。
-         *
-         * 现在四件事同时做（缺一件都不够）：
-         *   ① 输入框换成 InputField.* 专用令牌（专属底色 + 描边）
-         *   ② 显式设 placeholderColor —— 这是最关键的一条
-         *   ③ 聚焦时描边转品牌色并加宽，光标同步
-         *   ④ 标签从 TEXT_SUB 提到 TEXT、字号加大，字号放大到 BODY 级别，
-         *      「这是一个需要你操作的字段」这件事必须一眼可读
+         * 输入框四件事：InputField.* 专用令牌（底色+描边）+ placeholderColor +
+         * 聚焦描边转品牌色 + 标签提级。缺一件都可能看不清。
          */
         Column({ space: Space.SM }) {
           Row({ space: 6 }) {

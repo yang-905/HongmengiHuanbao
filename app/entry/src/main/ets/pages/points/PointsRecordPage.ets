@@ -19,9 +19,6 @@ interface TypeTab {
 const EMPTY_LOG: LocalPointsLog = {
   logId: 0, changeType: '', points: 0, balanceAfter: 0, remark: '', createTime: ''
 };
-
-/* ---------- 模块级纯函数（条目组件与页面共用，不依赖 this） ---------- */
-
 /** 类型文案 */
 function typeText(t: string): string {
   if (t === 'earn') return '获得'
@@ -68,6 +65,7 @@ function typeIcon(t: string): string {
 }
 
 /**
+
  * 变动额文案：正数带 + 绿色，负数带 − 红色
  * 注意负号用 Unicode − 以便与 + 对齐
  */
@@ -85,16 +83,8 @@ function timeText(l: LocalPointsLog): string {
 }
 
 /**
+
  * 单条流水条目（懒加载 + 回收复用）
- * ------------------------------------------------------------------
- * 原为页面内的 @Builder LogRow，随 Scroll+ForEach 全量急切构建；
- * 流水涨到几百条时进页面就要建完整棵列表树。改为 @Reusable 组件后：
- *   · 只有可见区域（+ cachedCount）的条目会被创建；
- *   · 滚出屏幕的条目进回收池，新条目滚进来时 aboutToReuse 换数据复用，
- *     不再反复新建/销毁节点。
- *
- * 主题订阅（themeTick / ecoLevel）直接落在条目上而不是父组件逐层传参：
- * 换肤/切碳档位时可见条目各自重渲染，与原来 ForEach 全量重渲的行为一致。
  */
 @Reusable
 @Component
@@ -108,6 +98,7 @@ struct PointsLogItem {
   }
 
   /**
+
    * 条目数据（父组件 → 子组件单向同步）。
    * ⚠️ 必须是 @Prop 而不是 @State（同 RecordDayItem 2026-10-24 教训）：
    * @State 只在创建时拷一次初值，父侧 logsSource.reload 后进不来。
@@ -194,14 +185,8 @@ struct PointsLogItem {
 }
 
 /**
+
  * P14 积分明细（流水）
- * ------------------------------------------------------------------
- * 真实实现：时间倒序流水列表，正数绿色带 +、负数红色带 −，余额右对齐
- *          顶部汇总（可用/获得/兑换）+ 类型药丸筛选
- * 数据来源 DataSource.pointsLogs()（服务端优先，本地兜底）
- *
- * 性能：流水列表为 List + LazyForEach + @Reusable（见 PointsLogItem 注释），
- * 流水条数增长不再拖慢首屏构建与滚动。
  */
 @Component
 export struct PointsRecordPage {
@@ -223,11 +208,7 @@ export struct PointsRecordPage {
   private logsSource: LazySource<LocalPointsLog> = new LazySource<LocalPointsLog>()
   /**
    * 当前筛选结果（@State 镜像）。
-   * ⚠️ build 的空态 if 分支必须读它，不能读 logsSource.totalCount() ——
-   * 数据源是普通成员、非响应式对象，ArkUI 的 if 只在条件里读到的
-   * @State 变化时才重新求值，直接读数据源会导致「空态 ↔ 列表」
-   * 分支永不切换（本项目已踩过两次）。由 rebuild() 同步维护。
-   */
+ */
   @State private filtered: LocalPointsLog[] = []
   @State private filter: string = 'all'
   @State private loading: boolean = true
@@ -264,10 +245,7 @@ export struct PointsRecordPage {
     this.logsSource.reload(out)
     this.filtered = out
   }
-
-  /* ---------- 口径 ---------- */
-
-  /** 当前余额（列表首条即最新） */
+/** 当前余额（列表首条即最新） */
   private balance(): number {
     if (this.logs.length === 0) return 0
     return this.logs[0].balanceAfter
@@ -303,12 +281,8 @@ export struct PointsRecordPage {
   private openTask(): void {
     AppRouter.pathStack.pushPathByName(RouteName.TASK_CENTER, null)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -319,6 +293,7 @@ export struct PointsRecordPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -328,23 +303,13 @@ export struct PointsRecordPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
 
   /**
+
    * 深色换血 → 强制懒列表全量重建。
    * ⚠️ @Reusable 条目在复用池里收不到 themeTick 广播，复用回树也不重走
    *   build → 换血后池内条目停浅色套值（同 RecordListPage.onThemeTick）。
@@ -362,6 +327,7 @@ export struct PointsRecordPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -494,9 +460,7 @@ export struct PointsRecordPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 余额汇总 ---------- */
-  @Builder
+@Builder
   SummaryCard() {
     Column({ space: Space.MD }) {
       Column({ space: 4 }) {
@@ -531,9 +495,7 @@ export struct PointsRecordPage {
     .borderRadius(Radius.XL)
     .shadow(this.tw(Shadow.brand()))
   }
-
-  /* ---------- 汇总三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -569,9 +531,7 @@ export struct PointsRecordPage {
     }
     .width('100%')
   }
-
-  /* ---------- 类型筛选 ---------- */
-  @Builder
+@Builder
   TabBar() {
     Column({ space: Space.MD }) {
       Scroll() {

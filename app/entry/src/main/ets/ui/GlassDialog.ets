@@ -1,40 +1,13 @@
 /**
  * 玻璃弹窗与券视觉（兑换确认 / 券详情 / 券卡三段式）
- * ------------------------------------------------------------------
- * 本文件是「碳惠券包」功能的交互层，包含三样东西：
  *   ① GlassDialog      —— 弹窗公共工具（遮罩色 / 面板有效底色 / 时间格式）
  *   ② CouponTicketView —— 券卡视觉（列表页卡片与详情弹窗大图共用同一实现）
  *   ③ ExchangeConfirmDialog —— 积分商城兑换确认弹窗（覆盖层弹窗）
  *   ④ CouponDetailDialog    —— 券详情弹窗（覆盖层弹窗，含核销二维码）
  *
- * ⚠️ 弹窗范式：普通 @Component + 宿主 Stack 覆盖层，禁用 @CustomDialog
- * ------------------------------------------------------------------
- * 根因（2026-10-20 预览器实测，previewer.log 铁证）：JS 侧一旦
- * `new CustomDialogController(...)` / `.open()`，预览器原生侧单例为空
- * 直接段错误 ——
- *   [JsEngine Crash] ErrorCode: 0xc0000005（访问违例）
- *   libace_compatible!OHOS::Ace::CustomDialogControllerModel::GetInstance()
- * 表现为点「兑换」预览器直接「预览失败」弹红条，应用层无解（真机不受
- * 影响，但预览链路不可用）。代码库既有弹层（Index 的 AddSheet /
- * QuizSheet）一律走「普通 @Component + 宿主挂载」，此处回归同一范式。
- *
- * 覆盖层结构（两个弹窗同构；宿主只出状态与回调，不碰控制器）：
- *   Stack() {
- *     遮罩 Column —— GlassDialog.maskColor() + onClick 关闭
- *                    （等价原 CustomDialog 的 autoCancel: true）；
- *     居中 Column —— justifyContent(Center) + hitTestBehavior(Transparent)
- *                    （等价 DialogAlignment.Center，且自身不吃触摸事件，
- *                    面板以外的点击穿透给遮罩层）；
- *     玻璃面板   —— 原弹窗内容原样，opacity/scale 由 visible 属性驱动
- *                    200ms 入场退场（宿主挂载后延一帧置 visible，
- *                    同 Index slotDeleteIn 手法）。
- *   }
- *
- * 深色 / 碳情绪口径（与全库一致）：
- *   · 所有 static 色值经 tc()/tw() 取值即建立 themeTick 依赖，换肤后重建重取；
- *   · 档位色（primaryPale / primaryDeep / bgSolid）跟随 ecoLevel；
- *   · 玻璃面一律走 GlassLight.surface 预合成渐变 + backdropBlur +
- *     GlassLight.borderColors/shadowOf 三件套，不硬编码光照参数。
+ * 弹窗范式：普通 @Component + 宿主 Stack 覆盖层，禁用 @CustomDialog。
+ * 深色 / 碳情绪口径：static 色值经 tc()/tw() 取值建立 themeTick 依赖，
+ * 玻璃面走 GlassLight.surface + borderColors + shadowOf 三件套。
  */
 
 import { LocalBenefit, LocalCoupon } from '../data/MockStore'
@@ -46,8 +19,6 @@ import { CfButton, CfCloseIcon, CfPill } from './Components'
 import { GlassLight, GlassTier } from './GlassLight'
 import { AppleMotion } from './AppleMotion'
 import { CfIcon } from './Icon';
-
-/* ==================== 弹窗公共工具 ==================== */
 
 export class GlassDialog {
   /** 券卡固定高度（三段式：左主区 / 中缝 / 右券面） */
@@ -76,17 +47,7 @@ export class GlassDialog {
     return ThemePalette.dark ? 'rgba(0,0,0,0.56)' : 'rgba(20,26,24,0.45)'
   }
 
-  /**
-   * 弹窗面板的**有效底色**（券缺口圆的填色）。
-   * ------------------------------------------------------------------
-   * 缺口圆必须填「卡片后方真实可见的颜色」才能与所处表面融为一体：
-   *   · 列表页：卡片后方是页面根实色（EcoTheme.bgSolid —— 半透明页底
-   *     叠在 Index 根实色上的等效色）；
-   *   · 弹窗内：卡片后方是「页面根实色 → 遮罩 → 玻璃平涂」的逐层合成。
-   * 两者不同，弹窗里若直接填 bgSolid，券会浮在一块异色斑上。
-   * 面板本身是 135° 渐变，这里取平涂中位色近似 —— 渐变亮度方差在
-   * 16vp 的缺口圆上不可辨，且缺口圆只露出内侧半圆（外层被裁掉）。
-   */
+  /** 弹窗面板有效底色（券缺口圆填色）：遮罩 + 页面底 + 玻璃平涂的合成 */
   static panelNotch(ambientSolid: string): string {
     const mask: number[] = GlassLight.rgbaOf(GlassDialog.maskColor())
     const masked: number[] = GlassLight.rgbaOf(
@@ -121,18 +82,10 @@ export class GlassDialog {
   }
 }
 
-/* ==================== 券卡视觉（列表卡片 + 弹窗大图共用） ==================== */
-
 /**
  * 券卡三段式：左主区（图标/名称/有效期）｜中缝（半圆缺口 + 虚线）｜右券面（积分数）
- * ------------------------------------------------------------------
- * 中缝缺口实现要点（免 clip 剖切 Card、也不用第二张遮罩卡）：
- *   ① 外层 Row `.clip(true)`：缺口圆的溢出半圆被裁掉，只留「咬进卡片」的
- *      内侧半圆；同时把左右两区的直角统一收成外框圆角 —— 两区因此**不
- *      各自设圆角**（各设各的会在中缝接缝处露出 1px 斜接线）；
- *   ② 缺口圆直径 16 > 中缝宽 10：每侧咬进 3vp，圆与中缝同色（= 后方
- *      有效底色），视觉上是页面从票券边缘「啃」进了两个半圆；
- *   ③ 虚线用 12 条 layoutWeight(1) 的小柱填充，中缝任意高度都自动均分。
+ * 外层 Row .clip(true) 把缺口圆溢出半圆裁掉，只留咬进卡片的内侧半圆；
+ * 缺口圆直径 16 > 中缝宽 10，视觉上是页面从票券边缘「啃」进了两个半圆。
  */
 @Component
 export struct CouponTicketView {
@@ -143,9 +96,7 @@ export struct CouponTicketView {
   };
   /**
    * 'unused' | 'used' | 'expired'，调用方按 LocalStore.couponStatus 传入。
-   * ⚠️ 必须 @Prop（同 ExchangeConfirmDialog.benefit 口径）：宿主核销后
-   *   就地更新数据时，普通成员变量不会跟随父级同步，票面会停留
-   *   「N 天后失效」不变灰（2026-10-21 用户反馈）。
+   * 必须 @Prop：宿主核销后就地更新数据时，普通成员不会跟随父级同步。
    */
   @Prop status: string = 'unused';
   /** 缺口圆填充色 = 卡片后方有效底色（列表页传 bgSolid，弹窗传 panelNotch） */
@@ -198,7 +149,6 @@ export struct CouponTicketView {
 
   build() {
     Row({ space: 0 }) {
-      /* ---------- 左主区：图标 + 名称 + 有效期 ---------- */
       Column({ space: 5 }) {
         Row({ space: Space.SM }) {
           Stack({ alignContent: Alignment.Center }) {
@@ -249,7 +199,6 @@ export struct CouponTicketView {
       .padding({ left: Space.MD, right: Space.XS })
       .backgroundColor(this.active() ? this.tc(Glass.CARD_BG) : this.tc(Neutral.SURFACE))
 
-      /* ---------- 中缝：上下半圆缺口 + 垂直虚线 ---------- */
       Column() {
         Circle()
           .width(GlassDialog.NOTCH_D)
@@ -274,7 +223,6 @@ export struct CouponTicketView {
       .width(GlassDialog.SEAM_W)
       .height('100%')
 
-      /* ---------- 右券面区：大号积分数 ---------- */
       Column({ space: 2 }) {
         Text('' + this.coupon.points)
           .fontSize(FontSize.DISPLAY)
@@ -315,17 +263,10 @@ export struct CouponTicketView {
   }
 }
 
-/* ==================== 兑换确认弹窗 ==================== */
-
 /**
- * 积分商城兑换确认（覆盖层弹窗，居中）。
- * ------------------------------------------------------------------
- * 替代旧演示态 toast（「确认兑换…将扣除 N 分？」）：确认类交互必须可撤销、
- * 可看清后果，系统 toast 既不可撤销也没有按钮位。内容：
- *   权益图标 + 「确认兑换」+ 权益名 → 扣除/剩余摘要双格 →
- *   「存入碳惠券包，7 天内有效」提示 → 取消 / 确定兑换。
- * 宿主只传 benefit / available / visible 与两个回调；确认回调里执行
- * LocalStore.exchange，取消与确认都由宿主卸载（见文件头覆盖层范式）。
+ * 积分商城兑换确认覆盖层弹窗，居中。
+ * 宿主传 benefit / available / visible 与两个回调；确认回调里执行
+ * LocalStore.exchange，取消与确认都由宿主卸载。
  */
 @Component
 export struct ExchangeConfirmDialog {
@@ -500,24 +441,6 @@ export struct ExchangeConfirmDialog {
         .border({ width: 1, color: this.tw(GlassLight.borderColors(GlassTier.PANEL, '', 1)) })
         .borderRadius(Radius.XL)
         .shadow(this.tw(GlassLight.shadowOf(GlassTier.PANEL)))
-        /*
-         * 入场退场动画（苹果 Liquid Glass 弹窗口径，见 AppleMotion）：
-         *   进场 —— 淡入 + 92%→100% 缩放，弹簧曲线（350ms / 0.75 阻尼）。
-         *           弹簧会在 100% 附近有一次极轻过冲再回落，
-         *           这就是「从指尖弹出」的 Q 弹感。
-         *   退场 —— 同一条弹簧反向（淡出 + 缩回 92%），Q 弹地收回。
-         * ⚠️ 缩放幅度 ≤8%：面板挂着 backdropBlur，离屏模糊层每帧重采样，
-         *    大位移会掉帧（Index.ets 胶囊注释有实测记录）。
-         * ⚠️ 弹簧不写 duration：时长由物理参数自适应，硬写会退化成 EaseOut。
-         *
-         * ⚠️⚠️ 血的教训：`.animation()` **必须是静态值**，不能写成
-         *   `.animation(this.visible ? {spring} : {200ms})` 这种三元！
-         *   animation 表达式与 opacity/scale 在同一帧求值，三元写法会让
-         *   「animation 的更新」与「属性的变化」互相竞争 —— 实测表现是
-         *   **取消后再点开弹窗，入场动画丢失**，面板直接以终态出现
-         *   （用户反馈「取消后，再点还是会触发这个 bug」）。
-         *   静态值在组件创建时即设定，之后任何属性变化都稳定用它。
-         */
         .opacity(this.visible ? 1 : 0)
         .scale({ x: this.visible ? 1 : AppleMotion.ENTER_SCALE, y: this.visible ? 1 : AppleMotion.ENTER_SCALE })
         .animation({ curve: AppleMotion.springLike() })
@@ -527,20 +450,6 @@ export struct ExchangeConfirmDialog {
     .height('100%')
   }
 }
-
-/* ==================== 券详情弹窗 ==================== */
-
-/*
- * 弹窗内状态切换的入退场效果（模块级常量：TransitionEffect 可安全复用，
- * 不必每次 build 重建）。
- * ------------------------------------------------------------------
- * 口径对齐 AppleMotion（全库动效唯一定义处）：
- *   · 步进 = AppleMotion.stepIn/stepOut —— 淡入 + 下方 10vp 浮起；
- *   · 徽标 = AppleMotion.badgeIn —— 从 50% 弹簧弹入，
- *     「票据打出」的 Q 弹感比线性曲线更丝滑。
- * 挂载点：三分支内容各包一层 Column 挂 .transition(asymmetric(入, 出))，
- * 配合宿主侧 animateTo 包状态变更（布局高度变化同步平滑过渡）。
- */
 
 /** 通用步进入场：淡入 + 自下方 10vp 浮起 */
 const STEP_IN: TransitionEffect = AppleMotion.stepIn()
@@ -552,24 +461,8 @@ const STEP_OUT: TransitionEffect = AppleMotion.stepOut()
 const BADGE_SPRING_IN: TransitionEffect = AppleMotion.badgeIn()
 
 /**
- * 券详情（覆盖层弹窗，居中）：券大图 + 明细 + 按状态三态操作区。
- * ------------------------------------------------------------------
- * 状态三分支（liveStatus）：
- *   unused  —— 两步确认：「确定使用此券」→「确定使用吗？」（取消可
- *              回退到一态）。核销不可撤销，必须有一次显式确认
- *              （旧版一步触发，用户找不到确认入口）。
- *              确认后走 LocalStore.useCoupon 事务，成功即把返回的
- *              核销码写入 @State qrContent，本弹窗原地切换为
- *              二维码态（不关弹窗，用户原地看到结果）；
- *   used    —— 二维码态：白底底板 + QRCode + 「核销凭证」。
- *              二维码 payload 是**结构化核销凭证**（见
- *              LocalStore.useCoupon），任何扫一扫/相机都直接展示
- *              凭证文本，不会跳转到不存在的域名；
- *   expired —— 置灰「知道了」（过期券不允许使用，useCoupon 亦会拒绝）。
- *
- * 高度控制（弹窗不可滚动，内容必须一屏装下）：
- *   未使用/已过期走完整明细卡；已使用态把明细卡换成一行摘要，
- *   三种形态高度都压在 ~520vp 以内（二维码板 150vp 是最大件）。
+ * 券详情覆盖层弹窗，居中。券大图 + 明细 + 按状态三态操作区：
+ *  unused —— 两步确认核销；used —— 核销凭证入口；expired —— 置灰。
  */
 @Component
 export struct CouponDetailDialog {
@@ -922,24 +815,6 @@ export struct CouponDetailDialog {
         .border({ width: 1, color: this.tw(GlassLight.borderColors(GlassTier.PANEL, '', 1)) })
         .borderRadius(Radius.XL)
         .shadow(this.tw(GlassLight.shadowOf(GlassTier.PANEL)))
-        /*
-         * 入场退场动画（苹果 Liquid Glass 弹窗口径，见 AppleMotion）：
-         *   进场 —— 淡入 + 92%→100% 缩放，弹簧曲线（350ms / 0.75 阻尼）。
-         *           弹簧会在 100% 附近有一次极轻过冲再回落，
-         *           这就是「从指尖弹出」的 Q 弹感。
-         *   退场 —— 同一条弹簧反向（淡出 + 缩回 92%），Q 弹地收回。
-         * ⚠️ 缩放幅度 ≤8%：面板挂着 backdropBlur，离屏模糊层每帧重采样，
-         *    大位移会掉帧（Index.ets 胶囊注释有实测记录）。
-         * ⚠️ 弹簧不写 duration：时长由物理参数自适应，硬写会退化成 EaseOut。
-         *
-         * ⚠️⚠️ 血的教训：`.animation()` **必须是静态值**，不能写成
-         *   `.animation(this.visible ? {spring} : {200ms})` 这种三元！
-         *   animation 表达式与 opacity/scale 在同一帧求值，三元写法会让
-         *   「animation 的更新」与「属性的变化」互相竞争 —— 实测表现是
-         *   **取消后再点开弹窗，入场动画丢失**，面板直接以终态出现
-         *   （用户反馈「取消后，再点还是会触发这个 bug」）。
-         *   静态值在组件创建时即设定，之后任何属性变化都稳定用它。
-         */
         .opacity(this.visible ? 1 : 0)
         .scale({ x: this.visible ? 1 : AppleMotion.ENTER_SCALE, y: this.visible ? 1 : AppleMotion.ENTER_SCALE })
         .animation({ curve: AppleMotion.springLike() })

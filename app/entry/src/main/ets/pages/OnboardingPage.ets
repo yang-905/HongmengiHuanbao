@@ -10,6 +10,7 @@ import { AppleMotion } from '../ui/AppleMotion';
 import { CfIcon } from '../ui/Icon';
 
 /**
+
  * 引导页单屏内容：ArkTS 严格模式下对象字面量必须对应显式类型，故声明 class
  */
 class GuidePage {
@@ -34,11 +35,8 @@ class GuidePage {
 }
 
 /**
+
  * 三屏引导内容：低碳核算 / 积分激励 / 数据看板
- *
- * ⚠️ 模块级常量，没有 `this`，也不能用 EcoTheme.xxx(this.ecoLevel)。
- * 引导页是**首次启动的品牌展示**，用固定品牌绿是正确的 ——
- * 此时用户还没有任何碳数据，不存在"档位"概念。
  */
 const PAGES: GuidePage[] = [
   new GuidePage('sprout', '记录低碳，算清碳账',
@@ -56,8 +54,8 @@ const PAGES: GuidePage[] = [
 ]
 
 /**
+
  * P02 功能引导页（仅首次启动展示，由 Index 条件渲染）
- * ------------------------------------------------------------------
  * 三屏轮播：用 @State 索引切换当前屏，不使用 Swiper，
  * 保证 Previewer 与低版本设备都能稳定渲染；
  * 底部「下一步 / 跳过」按钮，末屏文案变为「开始体验」。
@@ -107,12 +105,8 @@ export struct OnboardingPage {
     toast('随时可在「设置」里重新查看引导')
     this.onFinish()
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -123,6 +117,7 @@ export struct OnboardingPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -132,18 +127,7 @@ export struct OnboardingPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }

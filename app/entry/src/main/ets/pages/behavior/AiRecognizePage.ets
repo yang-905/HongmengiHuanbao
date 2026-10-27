@@ -17,18 +17,8 @@ class RecognizeStage {
 }
 
 /**
+
  * P27 AI 拍照识别录入（创新拓展 · 端侧 AI）
- * ------------------------------------------------------------------
- * 路由名：AI_RECOGNIZE（NavDestination，PageMap 集中注册）
- *
- * 完整链路：
- *   ① 选图：PhotoViewPicker 系统相册（免权限）→ 真实图片 uri
- *      （保留演示样例 chips 与文件名输入，供无端侧模型环境降级体验）
- *   ② 点「开始识别」→ AiVisionRecognizer（MindSpore Lite 端侧真推理）
- *      演示模式则走 DataSource.recognize 词库链路
- *   ③ 展示识别结果：行为图标 / 名称 / 置信度 / 预估减排 / 预估积分 / 识别依据
- *   ④ 数量步进器可调，实时联动减排与积分
- *   ⑤ 点「确认录入」写入本地待同步队列（服务端接口后续接入）
  */
 @Component
 export struct AiRecognizePage {
@@ -72,10 +62,7 @@ export struct AiRecognizePage {
 
   /** 演示样例（模拟器/无端侧模型环境的关键词链路输入），降低体验门槛 */
   private samples: string[] = ['bike.jpg', 'bus.jpg', 'clearplate.jpg', 'plastic.jpg', 'paper.jpg']
-
-  /* ---------- 工具方法 ---------- */
-
-  private fmtNum(n: number): string {
+private fmtNum(n: number): string {
     const v: number = Math.round(n * 1000) / 1000
     if (Math.abs(v - Math.round(v)) < 0.0001) {
       return '' + Math.round(v)
@@ -131,10 +118,7 @@ export struct AiRecognizePage {
     if (this.confPct() >= 75) return '待确认'
     return '低置信'
   }
-
-  /* ---------- 交互 ---------- */
-
-  /** ① 唤起系统相册选图（免权限） */
+/** ① 唤起系统相册选图（免权限） */
   private async pickPhoto(): Promise<void> {
     try {
       const uri: string = await AiVisionRecognizer.pickPhoto();
@@ -274,13 +258,11 @@ export struct AiRecognizePage {
        * 根因是识别链路的 `DataSource.recognize()` 只产出**预览对象**，
        * 并不落库（落库需要 quantity/factorValue 等写入参数），
        * 而确认环节漏了补上这一步。
-       *
        * 现在真正调 DataSource.addRecord 写入；该方法内部会
        * `EcoMoodState.broadcastDataChange()`，于是：
        *   首页 DashboardPage / 科普页 / 记录页 → ecoTick → load() 自动重拉
        *   全应用配色 → EcoMoodState.refresh() 重算档位
        * 即「AI 识别录入后自动刷新」由数据层统一保证，不依赖页面各自处理。
-       *
        * 数量口径：用户可在「确认数量」步进器里改 amount，所以写入时用
        * this.amount 而非识别结果的 r.amount；因子取this.factor（识别时
        * 已按 itemId 匹配到，匹配不到则退回用识别结果里的字段）。
@@ -345,12 +327,8 @@ export struct AiRecognizePage {
       }
     })
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -361,6 +339,7 @@ export struct AiRecognizePage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -370,18 +349,7 @@ export struct AiRecognizePage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -393,6 +361,7 @@ export struct AiRecognizePage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -479,9 +448,7 @@ export struct AiRecognizePage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- ① 图片选择区 ---------- */
-  @Builder
+@Builder
   PickerCard() {
     Column({ space: Space.MD }) {
       // 取景区：选到真图显示预览，否则占位提示
@@ -569,7 +536,6 @@ export struct AiRecognizePage {
             /*
              * 与 BehaviorAddSheet 的数量输入框同一套修复：
              * 显式 placeholderColor 是关键 —— 不设就用系统默认灰，
-             * 在本项目两种主题下对比度都只有 1.0 上下（实测 1.09:1），
              * 提示文字等于不存在。描边则让"这里可以输入"成为确定事实。
              */
             .placeholderColor(this.tc(InputField.placeholder(ThemePalette.dark)))
@@ -644,9 +610,7 @@ export struct AiRecognizePage {
     .borderRadius(Radius.LG)
     .shadow(this.tw(Shadow.card()))
   }
-
-  /* ---------- 识别中 ---------- */
-  @Builder
+@Builder
   RecognizingCard() {
     Column({ space: Space.MD }) {
       Column({ space: 6 }) {
@@ -688,9 +652,7 @@ export struct AiRecognizePage {
     .borderRadius(Radius.LG)
     .shadow(this.tw(Shadow.card()))
   }
-
-  /* ---------- ③ 识别结果卡 ---------- */
-  @Builder
+@Builder
   ResultCard() {
     Column({ space: Space.MD }) {
       CfSection({
@@ -839,9 +801,7 @@ export struct AiRecognizePage {
     }
     .width('100%')
   }
-
-  /* ---------- ④ 数量步进器 ---------- */
-  @Builder
+@Builder
   StepperCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '确认数量' })
@@ -968,9 +928,7 @@ export struct AiRecognizePage {
     }
     return out
   }
-
-  /* ---------- ⑤ 确认录入 ---------- */
-  @Builder
+@Builder
   ConfirmButton() {
     Row({ space: 6 }) {
       if (this.submitting) {
@@ -997,9 +955,7 @@ export struct AiRecognizePage {
       this.confirm()
     })
   }
-
-  /* ---------- 未识别时的引导 ---------- */
-  @Builder
+@Builder
   GuideCard() {
     Column({ space: Space.MD }) {
       CfEmpty({

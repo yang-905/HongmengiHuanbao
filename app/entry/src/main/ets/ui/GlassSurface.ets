@@ -1,39 +1,18 @@
 /**
  * 玻璃表面组件（统一光照模型的落地载体）
- * ------------------------------------------------------------------
- * 所有玻璃面必须走这两个组件，不允许页面自己叠渐变「画高光」——
- * 光照参数全部来自 GlassLight，保证全库方向一致。
- *
- * GlassPanel  内容面板（文章卡 / Hero / 测验入口 / 空态 / 弹窗）
- * GlassPill   小胶囊（分类 chip / 收藏钮 / 分段药丸）
- *
- * 每层玻璃的光照栈（自底向上）：
- *   ① 接触纱    —— 亮背景下的暗色 anchor，托住文字对比度（可读性）
- *   ② 对角光染  —— 135° 主光源：左上受光反射 + 右下内阴影（厚度）
- *   ③ 顶边菲涅尔 —— 顶部 13% 的亮→透明衰减（边缘反射）
- *   ④ 左边菲涅尔 —— 左侧 13% 的亮→透明衰减（边缘反射）
- *   ⑤ 内容      —— 永远在最上，光照不压文字（可读性优先）
- *   外加：1px 四边异色描边（上/左白 = 受光，下/右深 = 背光）
- *         + 右下的外投影（与内阴影同向，接触感）
- *         + 可选的 backdropBlur（仅小面积元素，card 档永不模糊）
+ * 所有玻璃面走这两个组件：GlassPanel（内容面板）、GlassPill（小胶囊）。
+ * 光照栈由 GlassLightLayers Builder 自底向上构建，含接触纱、对角光染、
+ * 顶边/左边菲涅尔；外加 1px 四边异色描边 + 右下外投影。
  */
 import { GlassLight, GlassPress, GlassTier, GlassQualityLevel } from './GlassLight';
 import { Brand, Radius, ThemePalette } from './Theme';
 import { AppleMotion } from './AppleMotion';
 
 /**
- * 玻璃光照层栈（全局 Builder）。
- * ------------------------------------------------------------------
- * 供 GlassPanel / GlassPill 复用，也供 Index.ets 底部胶囊这类
- * 特殊布局直接嵌入（放在内容之下、容器底色之上）。
- *
- * 自底向上：接触纱 → 对角光染(含内阴影) → 顶边菲涅尔 → 左边菲涅尔
- *           →（深色）文字暗纱。
- * parallax 传入当前视差位移（vp）；不跟滚动的布局传 0。
- * gloss < 1 用于实底元素（选中药丸）上的克制高光。
- * textScrimOn 控制深色文字暗纱：实底元素（品牌渐变 Hero /
- * 选中药丸）传 false —— 暗纱会压脏品牌色。
- * LITE 档整栈不渲染（零叠加层降级）。
+ * 玻璃光照层栈（全局 Builder），供 GlassPanel / GlassPill 复用，
+ * 也供 Index.ets 底部胶囊这类特殊布局直接嵌入。
+ * parallax 传入当前视差位移；gloss < 1 用于实底元素的克制高光；
+ * textScrimOn 控制深色文字暗纱（实底元素传 false）。
  */
 @Builder
 export function GlassLightLayers(tier: string, ambient: string, parallax: number, gloss: number,
@@ -151,17 +130,7 @@ export struct GlassPanel {
   @Builder
   emptySlot() {}
 
-  /**
-   * 实际铺在组件上的渐变（零子层方案的唯一底面）。
-   * ------------------------------------------------------------------
-   * · 普通玻璃：走 `GlassLight.surface()` 把底色 + 左上白光 + 右下内阴影
-   *   合成进**一条** 135° 渐变 —— 这是「光从左上 45° 射入」的承载方式。
-   * · 品牌渐变 Hero（bgGradient 传了）：保留自定义渐变作为底，
-   *   不叠 wash/菲涅尔 —— 品牌实底上再压白光会把色相洗淡
-   *   （原实现在 Stack 里也传了 textScrim=false，但 wash 仍会叠）。
-   *   厚度改由四边异色描边 + 品牌投影承担。
-   * · 画质 LITE：零光照，只留底色。
-   */
+  /** 组件自身渐变（零子层方案）：普通玻璃走 GlassLight.surface 合成 */
   private surfaceValue(): LinearGradient {
     if (this.bgGradient !== undefined) {
       return this.bgGradient;
@@ -194,11 +163,8 @@ export struct GlassPanel {
     .linearGradient(this.surfaceValue())
     .borderRadius(this.corner)
     /*
-     * 四边异色描边，**四边等宽 1vp**。
-     * ⚠️ 描边宽度只能用整数：非整数（如 top: 1.5）+ borderRadius 裁剪
-     *    会在描边内侧留下一条未填充的暗缝，横贯整个组件顶边 ——
-     *    取证实测该暗线比上下低 12~15，视觉上就是「一条黑线/ 暗角」。
-     *    厚度感改由 alpha 亮度差（上/左亮、下/右深）承担。
+     * 四边异色描边，四边等宽 1vp。
+     * 非整数宽度 + borderRadius 会在描边内侧留暗缝；厚度感靠 alpha 亮度差。
      */
     .border({
       width: { top: 1, left: 1, right: 1, bottom: 1 },
@@ -289,14 +255,7 @@ export struct GlassPill {
   pressScale: number = GlassPress.PILL;
   /**
    * 是否撑满父容器宽度（默认 false = fit-content）。
-   * ------------------------------------------------------------------
-   * 为「分类栏按格均分」场景准备：科普页 4 个分类用 Flex 折行时，
-   * fit-content 会让总宽超出容器 → Flex 把第一行**压窄**，
-   * chip 被裁掉一半（实测白色 chip 左边缘外溢 5px、「减排技巧」孤行）。
-   *
-   * 设为 true 后药丸跟随父容器宽度，配合调用方的均分格宽使用；
-   * 默认保持 fit-content，因为 chip / 收藏钮等场景都排在横向 Row 里，
-   * 百分比宽会撑满整行。
+   * 为分类栏按格均分场景准备，配合调用方的均分格宽使用。
    */
   fillWidth: boolean = false;
   /** 点击回调 */

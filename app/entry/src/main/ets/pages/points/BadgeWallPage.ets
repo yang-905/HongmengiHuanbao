@@ -10,8 +10,8 @@ import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * P17 徽章墙
- * ------------------------------------------------------------------
  * 真实实现：解锁进度头卡 + 10 枚徽章网格
  *          已解锁：彩色底 + 悬起投影 + 解锁日期
  *          未解锁：灰态 + 锁定图标 + 解锁阈值
@@ -60,10 +60,7 @@ export struct BadgeWallPage {
       this.badges = []
     }
   }
-
-  /* ---------- 口径 ---------- */
-
-  /** 已解锁数量 */
+/** 已解锁数量 */
   private unlockedCount(): number {
     let n: number = 0
     for (let i = 0; i < this.badges.length; i++) {
@@ -123,10 +120,7 @@ export struct BadgeWallPage {
     const idx: number = this.badges.indexOf(b)
     return palette[idx % palette.length]
   }
-
-  /* ---------- 交互 ---------- */
-
-  private tapBadge(b: LocalBadge): void {
+private tapBadge(b: LocalBadge): void {
     this.currentBadge = b
     this.showBadgeSheet = true
   }
@@ -144,12 +138,8 @@ export struct BadgeWallPage {
   private openTask(): void {
     AppRouter.pathStack.pushPathByName(RouteName.TASK_CENTER, null)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -160,6 +150,7 @@ export struct BadgeWallPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -169,18 +160,7 @@ export struct BadgeWallPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -193,6 +173,7 @@ export struct BadgeWallPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -289,9 +270,7 @@ export struct BadgeWallPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 解锁进度头卡 ---------- */
-  @Builder
+@Builder
   HeaderCard() {
     Column({ space: Space.LG }) {
       Row() {
@@ -365,9 +344,7 @@ export struct BadgeWallPage {
     .shadow(this.tw(Shadow.brand()))
     .clip(true)
   }
-
-  /* ---------- 统计三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -403,9 +380,7 @@ export struct BadgeWallPage {
     }
     .width('100%')
   }
-
-  /* ---------- 徽章网格 ---------- */
-  @Builder
+@Builder
   BadgeGrid() {
     Column({ space: Space.MD }) {
       CfSection({ title: '全部徽章', more: '去赚积分 ›', onMoreTap: (): void => this.openTask() })
@@ -466,9 +441,7 @@ export struct BadgeWallPage {
     for (let i: number = used; i < BadgeWallPage.COLS; i++) out.push(i);
     return out;
   }
-
-  /* ---------- 单枚徽章卡 ---------- */
-  @Builder
+@Builder
   BadgeCell(b: LocalBadge) {
     Column({ space: 6 }) {
       // 徽章主体：已解锁彩色悬起，未解锁灰态带锁标
@@ -559,9 +532,7 @@ export struct BadgeWallPage {
     .clip(true)
     .onClick((): void => this.tapBadge(b))
   }
-
-  /* ---------- 下一个目标 ---------- */
-  @Builder
+@Builder
   NextCard() {
     if (this.nextBadge() !== null) {
       Column({ space: Space.MD }) {

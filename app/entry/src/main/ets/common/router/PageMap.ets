@@ -1,7 +1,3 @@
-/**
- * NavDestination 集中注册（P08-P30 共 21 个进栈页面）
- * 由 Index 的 Navigation.navDestination 引用
- */
 import { AppRouter, RouteName } from './AppRouter'
 import { BehaviorDetailPage } from '../../pages/behavior/BehaviorDetailPage'
 import { FactorLibPage } from '../../pages/behavior/FactorLibPage'
@@ -30,28 +26,15 @@ import { ProfilePage } from '../../pages/mine/ProfilePage'
 import { CouponListPage } from '../../pages/points/CouponListPage'
 import { CouponRedeemPage } from '../../pages/points/CouponRedeemPage'
 
-/**
- * 带参数跳转。
- * 说明：PageMap 已提供 NavDestination 容器，页面内部不能再包一层，
- * 因此拿不到 NavDestinationContext.onReady。统一改为把参数写入 AppStorage，
- * 由目标页在 aboutToAppear 中读取并清理。
- *
- * 统一出口：所有 push 都经由 go()，在这里同步路由栈深度，
- * 供 Index 的「＋」按钮判断该显示为胶囊第 5 格还是左下角悬浮球。
- */
 export function go(route: string): void {
   AppRouter.pathStack.pushPathByName(route, null)
 }
 
 export function goWithParam(route: string, paramKey: string, paramValue: number): void {
-  // ⚠️ 必须用 setOrCreate：AppStorage.set 对不存在的键是**静默 no-op**（返回 false），
-  // 路由参数键通常没有 @StorageProp 预声明，用 set 会导致目标页读到 undefined ——
-  // 正是「文章详情永远显示文章不存在或已下架」的根因。
   AppStorage.setOrCreate<number>(paramKey, paramValue)
   go(route)
 }
 
-/** 带字符串参数跳转（如月度账单的月份） */
 export function goWithParamStr(route: string, paramKey: string, paramValue: string): void {
   AppStorage.setOrCreate<string>(paramKey, paramValue)
   go(route)

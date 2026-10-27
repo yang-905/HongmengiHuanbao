@@ -1,16 +1,5 @@
 /**
  * 碳情绪调试面板（开发者工具，正常用户不可见）
- * ------------------------------------------------------------------
- * 用途：强制切换碳情绪档位，用于验证全应用（27 页 + 3 Sheet + 组件层）
- *      在四种档位下的配色适配，快速发现「某档下对比度不足 / 文字被压」
- *      「组件颜色没跟着变」这类问题，不必真去凑记录凑出超标数据。
- *
- * 隐藏方式：设置页「关于」项**连点 7 次**才显现入口（见 SettingsPage），
- *          符合各平台对调试入口的通行做法。
- *
- * 关键实现：EcoMoodState.override() 会写入 AppStorage['ecoOverride']，
- *   而 apply() 计算完真实档位后会优先采用 override 值 ——
- *   这样既保留「真实判档」逻辑（可随时切回 auto），又能强制预览任意档位。
  */
 import { EcoMood, EcoTheme, Neutral } from '../../ui/Theme'
 import { GlassLight } from '../../ui/GlassLight'
@@ -89,8 +78,7 @@ export struct EcoDebugSheet {
 
       Scroll() {
         Column({ space: 12 }) {
-          /* ---------- 重新渲染 ---------- */
-          this.RerenderCard()
+this.RerenderCard()
 
           // 档位列表
           ForEach(this.options, (o: LevelOption) => {
@@ -145,14 +133,8 @@ export struct EcoDebugSheet {
   }
 
   /**
- * 「重新渲染」卡片
- * ------------------------------------------------------------------
- * 解决预览器调试的痛点：在 Previewer 里记录完行为后，其他页面
- * 往往还显示旧数据（Previewer 的页面生命周期与真机不同，
- * onPageShow 不保证触发）。点一下即可强制全应用重新拉数据。
- *
- * 原理：广播 ecoTick 信号 → 各页面的
- *   onStorageChange('ecoTick') → 重算碳档位 + load() 重拉数据。
+
+   * 「重新渲染」卡片
  */
   @Builder
   RerenderCard() {
@@ -365,10 +347,7 @@ export struct EcoDebugSheet {
     .borderRadius(14)
     .border({ width: 1, color: this.tc(Neutral.BORDER) })
   }
-
-  /* ---------- 交互 ---------- */
-
-  /** 档位中文名 */
+/** 档位中文名 */
   private labelOf(key: string): string {
     for (let i = 0; i < this.options.length; i++) {
       if (this.options[i].key === key) return this.options[i].name

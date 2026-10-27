@@ -1,11 +1,5 @@
 /**
  * P33 个人资料（设置「个人资料」/「我的」头像进入）
- * ------------------------------------------------------------------
- * 真实实现：当前账号展示 + 头像 emoji 选择 + 名字输入 + 性别三选 +
- *          手机号（选填，格式校验）+ 保存 + 切换账号
- * 资料存于 AccountStore（每账号独立一份，'acct_profile:<user>'），
- * 保存后广播 profileTick，「我的」页/设置页头像昵称即时同步。
- * 路由名：PROFILE（NavDestination，PageMap 集中注册）
  */
 import { Toast, toast } from '../../ui/Toast'
 import { AppRouter } from '../../common/router/AppRouter'
@@ -71,21 +65,9 @@ export struct ProfilePage {
   }
 
   /**
+
    * 资料页「真正上屏」信号 → 解除 Index 的注册引导误触闸门。
-   * ------------------------------------------------------------------
-   * ⚠️ 为什么不在 aboutToAppear 发：那是**页面被创建**的时刻，此时
-   * push 滑入动画还没跑完，主框架仍有一部分可见可点 —— 用户反馈的
-   * 「注册后资料页比主页面慢，手快能点到子页面」就是这个窗口。
-   *
-   * 现在的口径：
-   *   · NavDestination.onShown —— 系统在转场结束、页面真正显示后回调
-   *     （API 11+），这是最准的「上屏」时刻；
-   *   · 根节点 onAppear + 延时兜底 —— 万一 onShown 在某些设备/预览器
-   *     不回调，300ms 后仍发一次，保证闸门不会永久锁死。
-   *
-   * 普通入口（设置/我的页进入资料页）也发 —— Index 侧闸门未开时
-   * 静默跳过，无副作用。
-   */
+ */
   private notifyShown(): void {
     AppStorage.setOrCreate('profileSetupShown', true)
   }
@@ -112,10 +94,7 @@ export struct ProfilePage {
     this.gender = p.gender
     this.phone = p.phone
   }
-
-  /* ---------- 交互 ---------- */
-
-  private async save(): Promise<void> {
+private async save(): Promise<void> {
     if (this.busy) return
     if (this.account.length === 0) {
       toast('登录状态异常，请重新登录')
@@ -159,13 +138,9 @@ export struct ProfilePage {
   }
 
   /**
+
    * 从相册选一张图作头像。
-   * ------------------------------------------------------------------
-   * 相册选择器给的是**临时授权 URI**（重启即失效），所以选完立刻把图片
-   * 拷贝进应用沙箱（filesDir/avatar_<账号>.img），avatar 存沙箱的
-   * file:// 路径 —— 真机重启后仍可显示。同一账号重复选图直接覆盖旧文件。
-   * 预览器没有相册/文件能力，走 catch 静默降级为提示。
-   */
+ */
   private async pickImage(): Promise<void> {
     if (this.imgPicking) return
     this.imgPicking = true
@@ -201,20 +176,9 @@ export struct ProfilePage {
   }
 
   /**
+
    * 切换账号：注销会话 → Index 登录闸门自动翻出登录页。
-   * ------------------------------------------------------------------
-   * ⚠️ 不再在这里 pathStack.clear()（2026-10-20 修复「切换账号后再次
-   * 进入白屏，只能点导航栏刷新」）：旧写法在自己还压栈于该栈上时就清栈，
-   * 紧接着的 logout 又经闸门把整棵 Navigation 卸载 —— 弹栈与页面销毁
-   * 被整体卸载打断，NavPathStack 内部态留在半销毁状态；重新登录后新
-   * Navigation 复用同一栈实例，内容区渲染不出来（白屏）。
-   * 现在直接注销：闸门翻转时旧会话整棵树（含路由栈里的页面）自然销毁，
-   * 栈记录由 Index 的 onSessionUser 在重新登录时统一清理（彼时已无
-   * Navigation 挂在栈上，纯数据操作，安全）。
-   *
-   * 行为数据按账号命名空间隔离（'local_records@<user>'），
-   * 重新登录任一账号即恢复其数据（会话内快照见 LocalStore.switchUser）。
-   */
+ */
   private async switchAccount(): Promise<void> {
     const ok: boolean = await Toast.confirm(
       '切换后需重新登录；当前账号的数据仍保留在本机，随时可以切回来',
@@ -223,10 +187,7 @@ export struct ProfilePage {
     if (!ok) return
     await AccountStore.logout()
   }
-
-  /* ---------- 动态碳主题（AboutPage 同款骨架） ---------- */
-
-  @StorageProp('ecoLevel') ecoLevel: string = 'none'
+@StorageProp('ecoLevel') ecoLevel: string = 'none'
 
   private ecoBg(): string {
     return this.tc(EcoTheme.bg(this.ecoLevel))
@@ -239,6 +200,7 @@ export struct ProfilePage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -339,9 +301,7 @@ export struct ProfilePage {
       this.notifyShown()
     })
   }
-
-  /* ---------- 当前账号 ---------- */
-  @Builder
+@Builder
   AccountBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '当前账号' })
@@ -373,9 +333,7 @@ export struct ProfilePage {
     }
     .width('100%')
   }
-
-  /* ---------- 头像 ---------- */
-  @Builder
+@Builder
   AvatarBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '头像' })
@@ -441,9 +399,7 @@ export struct ProfilePage {
     }
     .width('100%')
   }
-
-  /* ---------- 名字 / 性别 / 手机号 ---------- */
-  @Builder
+@Builder
   InfoBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '基本资料' })
@@ -540,9 +496,7 @@ export struct ProfilePage {
     }
     .width('100%')
   }
-
-  /* ---------- 保存 / 切换账号 ---------- */
-  @Builder
+@Builder
   ActionBlock() {
     Column({ space: Space.MD }) {
       CfButton({

@@ -21,8 +21,8 @@ interface LevelStep {
 }
 
 /**
+
  * P12 成长树 / 等级
- * ------------------------------------------------------------------
  * 真实实现：等级进度环 + 五级阶梯（碳芽/新芽/绿芽/低碳达人/森林卫士）
  *          当前等级高亮，已达成 / 未解锁分态，顶部展示累计减排
  * 进度环使用系统 Progress 的 Ring 类型 + 居中文本叠层，零依赖实现。
@@ -61,10 +61,7 @@ export struct LevelTreePage {
       // DataSource 内部已兜底
     }
   }
-
-  /* ---------- 等级数据 ---------- */
-
-  /** 五级阶梯定义（与 Biz.levelRange 口径一致） */
+/** 五级阶梯定义（与 Biz.levelRange 口径一致） */
   private steps(): LevelStep[] {
     const out: LevelStep[] = []
     const icons: string[] = ['sprout', 'leaf', 'leaf', 'tree', 'trophy']
@@ -125,10 +122,7 @@ export struct LevelTreePage {
     if (st === 1) return 'info'
     return 'muted'
   }
-
-  /* ---------- 交互 ---------- */
-
-  private tapStep(s: LevelStep): void {
+private tapStep(s: LevelStep): void {
     const st: number = this.stateOf(s)
     if (st === 0) {
       toast('Lv.' + s.level + ' ' + s.name + ' 已达成，继续保持')
@@ -144,12 +138,8 @@ export struct LevelTreePage {
   private openPoints(): void {
     AppRouter.pathStack.pushPathByName(RouteName.POINTS_HOME, null)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -160,6 +150,7 @@ export struct LevelTreePage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -169,18 +160,7 @@ export struct LevelTreePage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -193,6 +173,7 @@ export struct LevelTreePage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -277,9 +258,7 @@ export struct LevelTreePage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 等级进度环 ---------- */
-  @Builder
+@Builder
   RingCard() {
     Column({ space: Space.LG }) {
       Row() {
@@ -376,9 +355,7 @@ export struct LevelTreePage {
     .shadow(this.tw(Shadow.card()))
     .clip(true)
   }
-
-  /* ---------- 数据三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -414,9 +391,7 @@ export struct LevelTreePage {
     }
     .width('100%')
   }
-
-  /* ---------- 五级阶梯 ---------- */
-  @Builder
+@Builder
   Ladder() {
     Column({ space: Space.MD }) {
       CfSection({ title: '五级成长阶梯', more: '去赚积分 ›', onMoreTap: (): void => this.openPoints() })

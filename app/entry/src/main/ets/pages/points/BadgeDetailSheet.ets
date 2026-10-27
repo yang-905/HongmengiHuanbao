@@ -9,8 +9,8 @@ import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * P18 徽章详情（半模态）
- * ------------------------------------------------------------------
  * bindSheet 半模态面板，不占路由；由宿主页（徽章墙）bindSheet 挂载。
  * 与 QuizSheet 同一约定：通过 onClose 回调交回关闭权，宿主页负责收起面板。
  * 展示：icon / 名称 / 描述 / 判定指标 / 阈值 / 达成度 / 解锁状态 / 解锁日期
@@ -34,10 +34,7 @@ export struct BadgeDetailSheet {
   badge: LocalBadge | null = null
   /** 关闭回调（宿主页 bindSheet 收起用） */
   onClose: () => void = (): void => {}
-
-  /* ---------- 判定指标口径 ---------- */
-
-  /** 指标中文名 */
+/** 指标中文名 */
   private metricName(b: LocalBadge): string {
     if (b.metric === 'reduction') return '累计减排';
     if (b.metric === 'count') return '低碳记录条数';
@@ -89,10 +86,7 @@ export struct BadgeDetailSheet {
     if (this.badge === null) return ''
     return this.badge!.unlockDate.length > 0 ? this.badge!.unlockDate : '已解锁'
   }
-
-  /* ---------- 交互 ---------- */
-
-  private close(): void {
+private close(): void {
     this.onClose()
   }
 
@@ -106,10 +100,7 @@ export struct BadgeDetailSheet {
     if (this.badge === null) return
     toast('「' + this.badge!.badgeName + '」成就卡已生成')
   }
-
-  /* ---------- 动态碳主题（与页面背景同步） ---------- */
-
-  /** 全局碳情绪档位（响应式，AppStorage 驱动） */
+/** 全局碳情绪档位（响应式，AppStorage 驱动） */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
 
   /** 记录变更信号 */
@@ -118,18 +109,7 @@ export struct BadgeDetailSheet {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -195,7 +175,6 @@ export struct BadgeDetailSheet {
      * 原来用 Neutral.BG = #FBF8F3 完全不透明，把底下的页面内容整个盖住，
      * 模糊自然一点也透不出来。改为半透明玻璃 + backdropBlur 实时高斯模糊，
      * 面板下方内容真实透出并虚化，形成苹果液态玻璃那种"浮在内容之上"的层次。
-     *
      * 用 backdropBlur 而非 backgroundBlurStyle：后者只模糊系统壁纸/窗口背景，
      * 对组件下方的实时内容不生效（见 Theme.ets Glass.LIVE_BLUR 注释）。
      */
@@ -206,9 +185,7 @@ export struct BadgeDetailSheet {
     // 底色/高光跟随碳档位平滑过渡，与页面根同一口径
     .animation({ duration: AppleMotion.THEME_MS, curve: AppleMotion.EASE })
   }
-
-  /* ---------- 顶部标题与关闭 ---------- */
-  @Builder
+@Builder
   Header() {
     Row() {
       Column({ space: 3 }) {
@@ -237,9 +214,7 @@ export struct BadgeDetailSheet {
     .width('100%')
     .padding({ left: Space.PAGE, right: Space.PAGE, top: Space.LG, bottom: Space.SM })
   }
-
-  /* ---------- 徽章主体 ---------- */
-  @Builder
+@Builder
   BadgeHead() {
     Row() {
       Column({ space: 5 }) {
@@ -321,9 +296,7 @@ export struct BadgeDetailSheet {
     // 字体放大时内容不允许顶出卡片
     .clip(true)
   }
-
-  /* ---------- 判定指标与阈值 ---------- */
-  @Builder
+@Builder
   RuleCard() {
     // 半透明卡（非实色）：面板根已有 backdropBlur 实时高斯模糊，
     // 卡片若再各挂一层模糊属于同区域叠加，会掉帧且过糊；
@@ -405,9 +378,7 @@ export struct BadgeDetailSheet {
     }
     .width('100%')
   }
-
-  /* ---------- 解锁状态 ---------- */
-  @Builder
+@Builder
   StatusCard() {
     Row() {
       if (this.badge!.unlocked) {
@@ -469,9 +440,7 @@ export struct BadgeDetailSheet {
     .shadow(this.tw(Shadow.card()))
     .clip(true)
   }
-
-  /* ---------- 底部操作 ---------- */
-  @Builder
+@Builder
   ActionRow() {
     Row({ space: Space.MD }) {
       CfButton({

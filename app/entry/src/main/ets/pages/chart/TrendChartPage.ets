@@ -10,6 +10,7 @@ import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * 粒度切换项：ArkTS 严格模式下数组字面量需显式声明元素类型
  */
 interface GranTab {
@@ -19,6 +20,7 @@ interface GranTab {
 }
 
 /**
+
  * 图表类型切换项：bar=柱状 / line=折线 / pie=饼图（环形）
  * 与 GranTab 分开定义：这里带 emoji 图标，且没有说明文案
  */
@@ -29,12 +31,8 @@ interface ChartTab {
 }
 
 /**
+
  * P10 减排趋势
- * ------------------------------------------------------------------
- * 真实实现：日/周/月粒度切换 + 带双轴刻度与数值标注的高柱状图
- *          + 最大值/平均值/总计统计 + 环比变化 + 分类构成
- * 柱状图实现思路与 DashboardPage 迷你柱一致：底部对齐 + 按最大值归一化高度，
- * 额外叠加左侧 kg 刻度、右侧积分刻度与横向网格线。
  */
 @Component
 export struct TrendChartPage {
@@ -42,7 +40,6 @@ export struct TrendChartPage {
    * 深色模式依赖注入（ArkUI 按属性表达式粒度更新）：
    * 色值/光照经 tc/tw 取值即建立 themeTick 依赖，换肤广播后强制重取
    * static 新色；td 同型用于 ThemePalette.dark 布尔分流。
-   *
    * ⚠️ @Watch('onThemeTick') 不能省：Canvas 是命令式绘制，
    *    换肤只重渲染组件树、不会重放绘制指令，折线/饼图会停留在
    *    旧主题配色上（与 SettingsPage.ets 同一写法）。
@@ -59,17 +56,7 @@ export struct TrendChartPage {
   @State private gran: string = 'day'
   /**
    * 统计口径快照。
-   *
-   * 早期实现是「数组存 @State + maxKg()/totalKg() 等方法现场聚合」。
-   * 但 ArkUI 只重求值「自身读取了被观测属性」的表达式：
-   * ForEach(this.points) 会按 key 重建子节点，而 StatRow/SummaryCard 里的
-   * Text(this.avgKg()) 这类跨方法调用未必被重新求值，
-   * 于是切到「周」时图表已是 8 根柱，统计区却还停留在日口径
-   * （平均 23.4/7=3.34、峰值周期「今天」、累计积分按 7 天累加）。
-   *
-   * 改为在 load() 里与 points 同一帧把聚合结果落成标量，
-   * 让图表和统计读同一份快照，从根上消除口径漂移。
-   */
+ */
   @State private maxV: number = 1
   @State private avgV: number = 0
   @State private totalV: number = 0
@@ -85,14 +72,13 @@ export struct TrendChartPage {
   /** 柱体生长动画开关：false 时柱子压扁且透明，置 true 后逐根长出 */
   @State private grown: boolean = false
   /**
-   * 切换轨道实测宽度（vp）。
    * 药丸宽度必须与文字槽位严格同宽，否则滑过去会错位。
-   * 轨道宽度依赖屏幕尺寸与页面 padding，用 onAreaChange 实测而非写死，
    * 这样换机型/换字号都不会错位（与 Index.ets barW 同思路）。
    */
   @State private trackW: number = 0
 
   /**
+
    * 当前图表类型：bar=柱状 / line=折线 / pie=饼图（环形）。
    * 三者共用同一份 points 数据，只是渲染方式不同，
    * 因此切换时不需要重新拉数据，只需换渲染分支 + 重绘画布。
@@ -100,20 +86,16 @@ export struct TrendChartPage {
   @State private chartType: string = 'bar'
 
   /**
-   * 图表类型轨道实测宽度（vp）。
-   * 与 trackW 相互独立：两个分段控件各自 onAreaChange 实测，
+
    * 写死宽度在换机型/换字号时会错位。
    */
   @State private typeTrackW: number = 0
 
   /*
    * 画布上下文（折线图 / 饼图）。
-   * ------------------------------------------------------------------
-   * 为什么柱状图用声明式组件、折线和饼图用 Canvas：
    *   柱状图是「等高槽位 + 归一化高度」的矩形，Row/Column 就能表达；
    *   折线的斜线与饼图的圆弧没有对应声明式组件（Polyline 只能画stroke、
    *   PathShape 不支持圆弧命令），Canvas 是唯一选择。
-   *
    * 坐标系说明：绘制坐标用 ctx.width / ctx.height 的**比例**表示，
    * 不调用 vp2px —— 该项目历史上多次因预览器热更新时 vp2px 返回脏值
    * 出现图层错位/重影（见 Components.ets CloseBtn.Arms 注释）。
@@ -126,6 +108,7 @@ export struct TrendChartPage {
   private pieCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.pieSettings)
 
   /**
+
    * 画布就绪标记。
    * 三个图表分支同一时刻只有一个挂载（if/else 互斥），
    * 因此两种画布共用一个就绪标记即可；
@@ -197,11 +180,8 @@ export struct TrendChartPage {
       })
     }, 60)
   }
-
-  /* ---------- 统计口径 ---------- */
-
-  /**
-   * 把 points 聚合结果一次性落到 @State 标量。
+/**
+ * 把 points 聚合结果一次性落到 @State 标量。
    * 必须在每次 points 赋值后立即调用，保证图表与统计区读同一份快照。
    */
   private syncStats(): void {
@@ -294,11 +274,8 @@ export struct TrendChartPage {
     if (v >= 10) return v.toFixed(1)
     return v.toFixed(2)
   }
-
-  /* ---------- 交互 ---------- */
-
-  /**
-   * 粒度切换。
+/**
+ * 粒度切换。
    * gran 的赋值放进 animateTo 闭包，药丸的 translate / 文字的 scale
    * 会在同一帧内做属性动画，读起来是「药丸滑过去 + 文字轻轻放大」，
    * 而非瞬间跳变（与 Index.ets switchTab 同思路）。
@@ -317,6 +294,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 图表类型切换。
    * 与 pickTab 不同：数据不变，只换渲染分支，因此不重拉 DataSource。
    * 切过去后重放入场动画，让折线/饼图也有「长出来」的仪式感。
@@ -332,6 +310,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 重放入场动画。
    * 与 load() 里的 grown 节奏保持一致：先归零，下一帧再置 true。
    */
@@ -345,6 +324,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 按当前图表类型重绘画布。
    * 柱状图是声明式渲染，无需重绘（直接 return）。
    * 所有可能影响画布内容的变化都要调它：数据、主题、尺寸。
@@ -382,12 +362,9 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 饼图色板：按周期序号循环取色。
-   * 颜色全部来自主题体系（EcoTheme 档位色 + Accent 分类语义色），
-   * 两者都是深色模式安全的（EcoTheme.* 读 ThemePalette.dark，
-   * Accent.* 由 applyDarkValues 整体换值）。
-   * 最多 8 个周期（周粒度 8 根），因此备 8 色。
-   */
+ */
   private pieColor(i: number): string {
     const palette: string[] = [
       this.tc(EcoTheme.primaryDeep(this.ecoLevel)),
@@ -417,18 +394,9 @@ export struct TrendChartPage {
     if (this.chartType === 'line') return '点击数据点可查看该周期的减排明细'
     return '点击柱体可查看该周期的减排明细'
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
-   * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
-   *
-   * ⚠️ @Watch('onEcoLevelTick') 同样不能省：档位变化会改
-   *    EcoTheme.*(level) 的返回值，而画布是命令式绘制，
-   *    不重绘就会停留在旧档位配色（与 themeTick 同理）。
-   */
+/**
+ * 全局碳情绪档位（响应式）。
+ */
   @StorageProp('ecoLevel') @Watch('onEcoLevelTick') ecoLevel: string = 'none'
 
   /** 当前档位对应的页面底色 */
@@ -437,6 +405,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -446,18 +415,7 @@ export struct TrendChartPage {
   /** 记录信号变化 → 重算全局碳档位 + 按当前粒度重拉数据 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -470,6 +428,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 深色模式切换 → 重绘画布。
    * 声明式部分（药丸/文字/图例）靠 themeTick 依赖自动换色，
    * 画布必须在这里显式重绘（颜色在 draw* 内部才求值）。
@@ -479,6 +438,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 碳情绪档位切换 → 重绘画布。
    * EcoTheme.*(ecoLevel) 的取值随档位变化，同样需要显式重绘。
    */
@@ -487,6 +447,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 按当前粒度重新拉取趋势数据。
    * load() 需要粒度参数，不能直接当无参重载调用，故单独包一层。
    */
@@ -495,6 +456,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -584,25 +546,9 @@ export struct TrendChartPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 粒度切换（液态玻璃分段控件） ---------- */
-
-  /**
-   * 分段切换：滑动药丸 + 液态玻璃
-   * ------------------------------------------------------------------
-   * 参照项目底部导航（Index.ets SlidingPill）的做法：
-   * 选中态是一块独立的药丸图层，用 translate 平移过去，
-   * 只改合成层属性、不触发布局与重绘，滑动才顺滑。
-   *
-   * 为什么不用「每个 chip 自己变色」：
-   *   · 那样药丸是原地缩放/淡入淡出，没有位移，读起来像「闪」而不是「滑」；
-   *   · 且药丸宽度无法跟随选中项，视觉上不连续。
-   *
-   * 玻璃质感对齐右下角 OrbButton：
-   *   PILL_BG 半透明底 + EDGE 1px 高光描边 + brand 投影 + backdropBlur。
-   * 注意同区域**不可叠加多层模糊**（见 Theme.ets Glass.LIVE_BLUR 注释），
-   * 因此外层容器不挂 backdropBlur，只有滑动的药丸挂。
-   */
+/**
+ * 分段切换：滑动药丸 + 液态玻璃
+ */
   @Builder
   TabBar() {
     Column({ space: 6 }) {
@@ -630,7 +576,6 @@ export struct TrendChartPage {
            * 在页面背景上留下一圈绿白光晕 —— 这就是截图里的瑕疵。
            * 改用无偏移、小半径的紧致投影：只做「浮起一点」的层次，
            * 范围完全落在药丸自身附近，不会溢出。
-           *
            * 注意：药丸**不挂 backdropBlur、也不加白色描边**——
            * * 渐变底是不透明实色，blur 会被整个盖住：既白建一层离屏渲染，
            *   边缘还会渗出一圈半透明晕（「边缘不对」的观感来源之一）；
@@ -722,19 +667,9 @@ export struct TrendChartPage {
       .animation({ duration: this.gran === key ? 260 : 200, curve: Curve.EaseOut })
       .onClick((): void => this.pickTab(key))
   }
-
-  /* ---------- 图表类型切换（柱状 / 折线 / 饼图） ---------- */
-
-  /**
-   * 图表类型分段控件：与 TabBar 同一套液态玻璃语言（滑动药丸 + 玻璃轨道），
-   * 只是更矮一档（32 vs 36）且每格带 emoji 图标，避免与上方的粒度控件
-   * 视觉权重打架。两者相互独立：粒度管「统计哪个区间」，
-   * 类型管「同一个区间怎么画」。
-   *
-   * 碳情绪/深色模式：药丸渐变走 EcoTheme.heroMid → heroTo(ecoLevel)，
-   * 轨道走 GlassLight.surface（tw 包裹），未选中文字走 Neutral.TEXT_SUB，
-   * 换肤/换档位时全部随属性表达式重新求值。
-   */
+/**
+ * 图表类型分段控件：与 TabBar 同一套液态玻璃语言（滑动药丸 + 玻璃轨道），
+ */
   @Builder
   TypeBar() {
     Stack({ alignContent: Alignment.Start }) {
@@ -802,9 +737,7 @@ export struct TrendChartPage {
     .justifyContent(FlexAlign.Center)
     .onClick((): void => this.pickType(key))
   }
-
-  /* ---------- 图表卡片（柱状 / 折线 / 饼图 三分支） ---------- */
-  @Builder
+@Builder
   ChartCard() {
     Column({ space: Space.MD }) {
       Row() {
@@ -857,17 +790,9 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 柱状图主体（原 ChartCard 内联的坐标轴三件套）。
-   * ------------------------------------------------------------------
-   * 坐标轴布局（修「柱底没有落在 X 轴上」）：
-   * 绘图区、基线、X 轴标签三者是**一个整体**，中间不能有任何间距。
-   * 之前它们是 ChartCard 里三个平级节点，被 Column({ space: Space.MD })
-   * 的 12vp 间距隔开，柱底到基线之间就出现一条明显空隙。
-   * 现在把三者收进一个 space: 0 的 Column，保证基线紧贴绘图区底边。
-   *
-   * 左右留白用与上方轴列严格等宽的 Blank 实现，
-   * 且各行 space 都为 0，避免 Row 的 space 在行与行之间产生歧义。
-   */
+ */
   @Builder
   BarBody() {
     Column({ space: 0 }) {
@@ -908,16 +833,9 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 折线图主体：左右纵轴 + Canvas 折线 + 基线 + X 轴标签。
-   * ------------------------------------------------------------------
-   * 与柱状图共用 AxisLabels / XLabels / 基线，刻度口径完全一致
-   * （maxKg 归一化、四档网格、1kg=10积分右轴），
-   * 只是把「声明式柱体」换成「Canvas 折线 + 面积 + 数据点」。
-   *
-   * 命中层：Canvas 是整块组件，拿不到每个数据点的点击区域，
-   * 因此在上层叠一层与柱状图同构的透明槽位 Row 承接点击，
-   * 三个图表类型的交互反馈（toast 明细）保持一致。
-   */
+ */
   @Builder
   LineBody() {
     Column({ space: 0 }) {
@@ -983,17 +901,9 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 饼图（环形）主体：Canvas 环形图 + 右侧图例。
-   * ------------------------------------------------------------------
-   * 为什么用环形而不是实心饼：空洞里放「累计减排」总计，
-   * 让饼图自带汇总信息，也避免实心饼中间一大块色块浪费。
-   * 为什么不用 destination-out 挖洞：挖洞依赖合成模式且挖出来的是
-   * 全透明（会透出卡片渐变），改用「外弧正向 + 内弧反向」直接画
-   * 环带，路径自洽、无合成模式依赖。
-   *
-   * 碳情绪/深色模式：色板全部走 pieColor()（EcoTheme 档位色 +
-   * Accent 语义色，均为深色安全），中心文字走 Neutral。
-   */
+ */
   @Builder
   PieBody() {
     Row({ space: Space.MD }) {
@@ -1067,17 +977,9 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 绘图区：网格线 + 柱体
-   * ------------------------------------------------------------------
-   * 柱体对齐（修「柱子底部没有落在 X 轴上」）：
-   * 之前每个槽位是一个 Column，内含「柱体 + 柱顶数值」两个子节点。
-   * 数值虽然加了 offset（视觉上移走），但它**仍然占据 Column 的布局高度**
-   * （VALUE_H = 12），Column 又设了 justifyContent(FlexAlign.End)，
-   * 于是这一行 12 的「隐形占位」把柱体整体顶离基线，柱底与 X 轴之间出现空隙。
-   *
-   * 现在改为：柱体与数值分层放在 Stack 里，柱体 Bottom 对齐 Stack 底边，
-   * 数值用 offset 浮在柱顶之上——两者互不影响，柱底线恒等于 X 轴。
-   */
+ */
   @Builder
   PlotArea() {
     Stack({ alignContent: Alignment.Bottom }) {
@@ -1138,6 +1040,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 柱体高度：按最大值归一化。
    * 预留 Chart.VALUE_H 给柱顶数值，保证最小值也有可见高度且不越过绘图区顶部。
    */
@@ -1150,21 +1053,9 @@ export struct TrendChartPage {
     const h: number = (kg / this.maxKg()) * usable;
     return Math.max(4, Math.min(usable, h));
   }
-
-  /* ---------- 折线图绘制（Canvas） ---------- */
-
-  /**
-   * 折线图：网格线 + 面积填充 + 折线 + 数据点 + 数值标签。
-   * ------------------------------------------------------------------
-   * 坐标与刻度口径与柱状图**逐位对齐**：
-   *   · 归一化预留 Chart.VALUE_H / chartH（与 barH 同一公式），
-   *     峰值数据点与峰值柱顶落在同一高度；
-   *   · 4 条网格线在 g/3 处，与 AxisLabels 的 SpaceBetween 四档同位；
-   *   · x 取槽位中心 (i+0.5)/n，与 XLabels 的等分槽位一一对应。
-   *
-   * 颜色全部在绘制时求值（tc + EcoTheme/Accent），
-   * 因此 onThemeTick / onEcoLevelTick 只需重调本方法即可整体换色。
-   */
+/**
+ * 折线图：网格线 + 面积填充 + 折线 + 数据点 + 数值标签。
+ */
   private drawLine(): void {
     const ctx: CanvasRenderingContext2D = this.lineCtx;
     const w: number = ctx.width;
@@ -1248,19 +1139,9 @@ export struct TrendChartPage {
       ctx.fillText(this.barValue(this.points[i].kg), xs[i], ys[i] - rDot - h * 0.022);
     }
   }
-
-  /* ---------- 饼图（环形）绘制（Canvas） ---------- */
-
-  /**
-   * 环形图：按当前区间各周期占比画环带，空洞由 declarative 汇总文字填充。
-   * ------------------------------------------------------------------
-   * 环带用「外弧正向 + 内弧反向」一条路径画成，不挖洞、不依赖合成模式，
-   * 卡片渐变能自然从环心透出。
-   * 相邻扇形之间留 0.018rad 间隙，避免同色系相邻时糊边。
-   *
-   * 全区间无减排时不画空圆，改画一圈 Neutral.BORDER 轨道环，
-   * 表明「有口径、暂无数据」，与 CfEmpty 的语义一致。
-   */
+/**
+ * 环形图：按当前区间各周期占比画环带，空洞由 declarative 汇总文字填充。
+ */
   private drawPie(): void {
     const ctx: CanvasRenderingContext2D = this.pieCtx;
     const w: number = ctx.width;
@@ -1310,6 +1191,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 画一段环带（环形图扇形）。
    * 外弧从 a0 正向扫到 a1，内弧从 a1 反向扫回 a0，闭合后一次填充。
    */
@@ -1346,6 +1228,7 @@ export struct TrendChartPage {
   }
 
   /**
+
    * 纵轴刻度列。
    * left=true 显示 kg；left=false 显示积分（1 kg = 10 积分）。
    * 两列都是「最大 / 1/3 / 2/3 / 0」四档，与绘图区网格线严格等高对齐。
@@ -1381,9 +1264,7 @@ export struct TrendChartPage {
     .justifyContent(FlexAlign.SpaceBetween)
     .alignItems(left ? HorizontalAlign.Start : HorizontalAlign.End)
   }
-
-  /* ---------- 统计：最大 / 平均 / 总计 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -1419,9 +1300,7 @@ export struct TrendChartPage {
     }
     .width('100%')
   }
-
-  /* ---------- 汇总卡 ---------- */
-  @Builder
+@Builder
   SummaryCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '区间汇总', more: '看分类占比 ›', onMoreTap: (): void => this.openCategory() })

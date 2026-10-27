@@ -45,12 +45,8 @@ class SettingGroup {
 }
 
 /**
+
  * P24 设置
- * ------------------------------------------------------------------
- * 真实实现：分组列表（账号资料 / 数据与备份 / 月度账单 / 家庭账户 /
- * 智慧服务 / 超级终端 / 关于），每项可点击进入对应页面
- * 顶部展示账号卡片：等级、累计减排、连续天数
- * 路由名：SETTINGS（NavDestination，PageMap 集中注册）
  */
 @Component
 export struct SettingsPage {
@@ -75,11 +71,7 @@ export struct SettingsPage {
   @State private showDebug: boolean = false
   /**
    * 深色模式开关状态。
-   * 用 @State 而不是 @StorageProp('darkMode')：ArkTS 禁止把
-   * @StorageProp 直接传给子组件的普通属性（10905315）。
-   * 同步路径：用户拨动 → ThemeMode.setDark 换血 + 推 themeTick
-   * → onStorageChange 回读 ThemeMode.isDark()。
-   */
+ */
   @State private darkOn: boolean = false
   /** 重新渲染开关：瞬时动作，触发后自动弹回（见 onRerender） */
   @State private rerenderFlash: boolean = false
@@ -130,10 +122,7 @@ export struct SettingsPage {
       // DataSource 内部已兜底
     }
   }
-
-  /* ---------- 分组定义 ---------- */
-
-  private groups(): SettingGroup[] {
+private groups(): SettingGroup[] {
     const g: SettingGroup[] = []
     g.push(new SettingGroup('账号资料', [
       new SettingItem('user', '个人资料', '头像 · 名字 · 性别 · 手机号', RouteName.PROFILE, 'Lv.' + this.level),
@@ -141,13 +130,7 @@ export struct SettingsPage {
         RouteName.LEVEL_TREE, Biz.levelName(this.level)),
       /**
        * ⚠️ 这里曾直接 push BEHAVIOR_DETAIL 却不带 detailRecordId，
-       *   目标页 aboutToAppear 读到 undefined → 永远显示「记录不存在」。
-       *   （用户反馈「记录详情没有修一下」，附的就是这个空态页。）
-       *
-       * 修法：改为携带真实 recordId —— 取最近一条记录的 id，
-       * 由 onItemTap 走 goWithParam 传入。列表页进详情走的正是这条路，
-       * 现在两条入口口径一致。
-       */
+ */
       new SettingItem('edit', '低碳记录', '共 ' + this.recordCount + ' 条行为记录',
         RouteName.BEHAVIOR_DETAIL, this.recordCount + ' 条')
     ]))
@@ -173,10 +156,7 @@ export struct SettingsPage {
     ]))
     return g
   }
-
-  /* ---------- 交互 ---------- */
-
-  private onItemTap(it: SettingItem): void {
+private onItemTap(it: SettingItem): void {
     // 「关于」是调试入口的解锁键：连点 7 次才显形
     if (it.route === RouteName.ABOUT) {
       this.tapAbout()
@@ -195,6 +175,7 @@ export struct SettingsPage {
   }
 
   /**
+
    * 打开最近一条低碳记录的详情。
    * 走 goWithParam 与记录列表页同一路径（AppStorage 传参 → aboutToAppear 读取），
    * 保证两条入口行为一致。一条记录都没有时不跳空页面，直接给提示。
@@ -208,15 +189,9 @@ export struct SettingsPage {
   }
 
   /**
+
    * 「关于」连点解锁调试面板。
-   *
-   * 为什么用连点而不是直接放一个入口：
-   *   调试面板是开发期工具，正常用户不该看到、也不该误触
-   *   （它会强制覆盖碳档位，导致显示与真实数据不符）。
-   *   连点 N 次是各平台通用的隐藏入口做法，且不增加任何界面元素。
-   *
-   * 计数在 3 秒内连续点击才有效 —— 避免用户日常多次点「关于」误触发。
-   */
+ */
   private tapAbout(): void {
     // 「关于」是正常入口，点它就该跳关于页。
     // ⚠️ 曾把调试解锁逻辑挂在这里，导致每次点击都跳走、用户点不满 7 次；
@@ -229,26 +204,15 @@ export struct SettingsPage {
   }
 
   /**
+
    * 强制全应用重新拉取数据。
-   *
-   * 背景：预览器（Previewer）里记录完行为后，其他页面常显示旧数据 ——
-   * Previewer 的页面生命周期与真机不同，onPageShow 不保证触发，
-   * 各页面的 @State 拿不到 LocalStore 的最新值。
-   *
-   * 这里广播 ecoTick 信号，25 个订阅页面的 onStorageChange 会
-   * 「重算碳档位 + load() 重拉数据」，从而把新记录刷进各页面。
-   * 单机版读本地存储是瞬时的，刷新无可见延迟。
-   */
+ */
   private rerenderAll(): void {
     EcoMoodState.broadcastDataChange()
     toast('已重新渲染全应用数据')
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -259,6 +223,7 @@ export struct SettingsPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -268,18 +233,7 @@ export struct SettingsPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -298,6 +252,7 @@ export struct SettingsPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -401,9 +356,7 @@ export struct SettingsPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 调试面板内容 ---------- */
-  @Builder
+@Builder
   DebugSheetContent() {
     EcoDebugSheet({
       onClose: (): void => {
@@ -411,9 +364,7 @@ export struct SettingsPage {
       }
     })
   }
-
-  /* ---------- 账号概览卡 ---------- */
-  @Builder
+@Builder
   AccountCard() {
     Row() {
       // 图片头像（相册上传，file:// 沙箱路径）直接铺圆；emoji 头像维持文字渲染
@@ -469,17 +420,9 @@ export struct SettingsPage {
       AppRouter.pathStack.pushPathByName(RouteName.PROFILE, null)
     })
   }
-
-  /* ---------- 外观：深色模式 / 重新渲染 / 玻璃画质 ---------- */
-
-  /**
-   * 外观分组。
-   * ------------------------------------------------------------------
-   * 三个开关的职责边界（与「数据管理」里的「刷新数据」刻意分开）：
-   *   深色模式 —— 换血 Theme 色值令牌 + 碳情绪四档深色适配；
-   *   重新渲染 —— 只推 themeTick 强制全应用界面重建（不换任何值）；
-   *   玻璃画质 —— 统一光照模型的降级档位（性能开关）。
-   */
+/**
+ * 外观分组。
+ */
   @Builder
   AppearanceSection() {
     Column({ space: Space.MD }) {
@@ -576,6 +519,7 @@ export struct SettingsPage {
   }
 
   /**
+
    * themeTick 变化（@Watch 驱动）：回读深色/画质状态，让开关与档位 chips
    * 与全局状态保持一致。此前 onStorageChange('themeTick') 写了回读逻辑，
    * 却没有任何 @Watch 调用它，导致拨动开关后本页 darkOn 不更新、开关不翻面。
@@ -594,6 +538,7 @@ export struct SettingsPage {
   }
 
   /**
+
    * 重新渲染开关（瞬时动作）。
    * 打开 → 推 themeTick 强制全应用界面重建 → 900ms 后自动弹回，
    * 避免开关停在「开」让用户误以为是持续状态。
@@ -621,9 +566,7 @@ export struct SettingsPage {
     if (key === GlassQualityLevel.CINEMATIC) return '电影'
     return '均衡'
   }
-
-  /* ---------- 分组列表 ---------- */
-  @Builder
+@Builder
   GroupList() {
     Column({ space: Space.LG }) {
       ForEach(this.groups(), (g: SettingGroup) => {
@@ -662,9 +605,7 @@ export struct SettingsPage {
     }
     .width('100%')
   }
-
-  /* ---------- 危险操作 ---------- */
-  @Builder
+@Builder
   DangerZone() {
     Column({ space: Space.MD }) {
       CfSection({ title: '数据管理' })
@@ -708,18 +649,9 @@ export struct SettingsPage {
     }
     .width('100%')
   }
-
-  /* ---------- 开发者工具（调试用） ---------- */
-  /**
-   * 开发者分组。
-   *
-   * ⚠️ 历史上这里用过「连点 7 次解锁」，实测两次失败：
-   *   1. 入口挂在「关于」上 → 每次点击都跳走，用户点不满 7 次
-   *   2. 改到页面最底部 → 用户根本找不到（要下滑到底）
-   * 连点解锁对「自己用的调试工具」是过度设计，现改为**直接可见可点**。
-   * 之所以仍放在独立分组而非混入用户功能，是因为它会强制覆盖碳档位
-   * （显示与真实数据不符），需要明确标注避免误触。
-   */
+/**
+ * 开发者分组。
+ */
   @Builder
   DevSection() {
     Column({ space: Space.MD }) {

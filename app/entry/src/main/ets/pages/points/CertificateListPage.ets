@@ -19,12 +19,8 @@ class CertificateDetailParam {
 }
 
 /**
+
  * P19 证书夹
- * ------------------------------------------------------------------
- * 真实实现：证书概览卡（张数 / 植树棵数 / 已消耗积分）
- *          + 证书卡列表（编号等宽显示、树种、棵数、消耗积分、颁发日期）
- *          + 空态引导去积分商城兑换
- * 路由名：CERTIFICATE_LIST（NavDestination，PageMap 集中注册）
  */
 @Component
 export struct CertificateListPage {
@@ -57,10 +53,7 @@ export struct CertificateListPage {
       this.certs = []
     }
   }
-
-  /* ---------- 口径 ---------- */
-
-  /** 累计认种棵数 */
+/** 累计认种棵数 */
   private totalTrees(): number {
     let n: number = 0
     for (let i: number = 0; i < this.certs.length; i++) {
@@ -94,10 +87,7 @@ export struct CertificateListPage {
     ]
     return palette[i % palette.length]
   }
-
-  /* ---------- 交互 ---------- */
-
-  private openDetail(c: LocalCert): void {
+private openDetail(c: LocalCert): void {
     goWithParam(RouteName.CERTIFICATE_DETAIL, 'detailCertId', c.certId)
   }
 
@@ -106,6 +96,7 @@ export struct CertificateListPage {
   }
 
   /**
+
    * 打开碳惠券包（证书夹 → 券包快捷入口）。
    * 用户原话「我的证书夹上面加入一个二级菜单入口」：二级菜单本体在
    * 「我的」页（MineEntry 碳惠券包），这里补一条证书夹内的直达链，
@@ -114,12 +105,8 @@ export struct CertificateListPage {
   private openCoupons(): void {
     AppRouter.pathStack.pushPathByName(RouteName.COUPON_LIST, null)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -130,6 +117,7 @@ export struct CertificateListPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -139,18 +127,7 @@ export struct CertificateListPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -163,6 +140,7 @@ export struct CertificateListPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -257,19 +235,9 @@ export struct CertificateListPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 概览大卡 ---------- */
-  /**
-   * 概览卡：左「已获证书」+ 右「累计认种 / 累计消耗」
-   * ------------------------------------------------------------------
-   * 排版修复（数字被截断、右侧两组指标挤成一团）：
-   *   · 左侧大数字用 HERO 字号(34)，**必须给宽度约束**，
-   *     否则它按内容无限撑开，把右侧两行指标挤出卡片右缘
-   *     （截图里「1800 分」被切掉一半就是这个原因）。
-   *   · 右侧两行改为「标签在上、数值在下」的竖排卡片，
-   *     每行 layoutWeight(1) 均分，数值右对齐并允许省略，
-   *     这样 4 位数积分也不会顶破边界。
-   */
+/**
+ * 概览卡：左「已获证书」+ 右「累计认种 / 累计消耗」
+ */
   @Builder
   SummaryCard() {
     Row({ space: Space.LG }) {
@@ -317,6 +285,7 @@ export struct CertificateListPage {
   }
 
   /**
+
    * 概览卡右侧的单个指标格。
    * 竖排「标签 / 数值」而非左右挤压：数值再长（4 位积分）也只占一行，
    * 且 layoutWeight 均分保证两格等宽。
@@ -349,9 +318,7 @@ export struct CertificateListPage {
     .layoutWeight(1)
     .constraintSize({ minWidth: 0 })
   }
-
-  /* ---------- 证书列表 ---------- */
-  @Builder
+@Builder
   CertSection() {
     Column({ space: Space.MD }) {
       CfSection({ title: '全部证书', more: '券包 ›', onMoreTap: (): void => this.openCoupons() })
@@ -364,9 +331,7 @@ export struct CertificateListPage {
     }
     .width('100%')
   }
-
-  /* ---------- 单张证书卡 ---------- */
-  @Builder
+@Builder
   CertCard(c: LocalCert, i: number) {
     Row() {
       // 左侧语义色条（右侧留 8vp 间距，避免色条紧贴证书文字）
@@ -446,9 +411,7 @@ Row() {
     .shadow(this.tw(Shadow.card()))
     .onClick((): void => this.openDetail(c))
   }
-
-  /* ---------- 空态操作 ---------- */
-  @Builder
+@Builder
   EmptyAction() {
     Row() {
       Text('去积分商城兑换证书')
@@ -467,9 +430,7 @@ Row() {
     .width('100%')
     .onClick((): void => this.openMall())
   }
-
-  /* ---------- 兑换提示 ---------- */
-  @Builder
+@Builder
   MallTip() {
     Row({ space: Space.MD }) {
       CfIcon({ kind: 'ui', code: 'gift', iconSize: 20 })

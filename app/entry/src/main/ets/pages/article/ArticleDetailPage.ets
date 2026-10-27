@@ -26,12 +26,8 @@ interface ArticleDetailParam {
 }
 
 /**
+
  * P21 文章详情
- * ------------------------------------------------------------------
- * 真实实现：大图标头图 + 分类标签 + 阅读数 + 正文（保留 \n 分段）+ 底部互动条
- * 互动：点赞 / 收藏 / 分享，点击即时切换状态并给出 toast 反馈
- * 文末可唤起 P23 低碳小测验（bindSheet 半模态）
- * 路由名：ARTICLE_DETAIL（NavDestination，PageMap 集中注册）
  */
 @Component
 export struct ArticleDetailPage {
@@ -60,7 +56,6 @@ export struct ArticleDetailPage {
 
   aboutToAppear(): void {
     // 隐藏右下角「＋」悬浮球：本页底部有自己的点赞/收藏互动条，
-    // 悬浮球会压在互动条上（用户反馈「加号下面有按键，UI 冲突」；
     // ProfilePage 同款 AppStorage 标记模式）
     AppStorage.setOrCreate('hideFab', true)
     // 路由参数由 PageMap 经 AppStorage 传入（PageMap 已提供 NavDestination 容器）
@@ -98,9 +93,7 @@ export struct ArticleDetailPage {
       this.article = null
     }
   }
-
-  /* ---------- 正文分段：按 \n 拆成段落，空行跳过 ---------- */
-  private paragraphs(): string[] {
+private paragraphs(): string[] {
     if (this.article === null) return []
     const out: string[] = []
     const raw: string[] = this.article.content.split('\n')
@@ -110,10 +103,7 @@ export struct ArticleDetailPage {
     }
     return out
   }
-
-  /* ---------- 互动 ---------- */
-
-  private toggleLike(): void {
+private toggleLike(): void {
     this.liked = !this.liked
     this.likeCount = this.liked ? this.likeCount + 1 : Math.max(0, this.likeCount - 1)
     // 持久化互动增量（相对 MockStore 基准的 delta ±1）并广播 articleTick，
@@ -132,15 +122,9 @@ export struct ArticleDetailPage {
   }
 
   /**
+
    * 分享：把文章标题 + 摘要组成分享文案写入**系统剪贴板**。
-   * ------------------------------------------------------------------
-   * 历史缺陷（用户反馈「分享复制之后，并没有真的复制」）：原实现只弹了
-   * toast，从未调用粘贴板 —— 说「已复制」但剪贴板里什么都没有。
-   * 现在统一走 Clipboard.copy()：写入成功才 toast「已复制」，
-   * 失败（预览器无剪贴板能力等）如实提示，不再假装成功。
-   * 文案口径：不放虚构 URL（会跳到不存在的域名，同核销二维码 v0 教训），
-   * 用「标题 + 摘要 + 引导」的纯文本，朋友拿到的信息真实可用。
-   */
+ */
   private share(): void {
     const a: LocalArticle | null = this.article
     if (a === null) {
@@ -168,12 +152,8 @@ export struct ArticleDetailPage {
       }
     })
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -184,6 +164,7 @@ export struct ArticleDetailPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -193,18 +174,7 @@ export struct ArticleDetailPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -217,6 +187,7 @@ export struct ArticleDetailPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -318,9 +289,7 @@ export struct ArticleDetailPage {
     // 不关的话 NavDestination 会叠一条系统标题栏在自绘 TopBar 上面。
     .hideTitleBar(true)
   }
-
-  /* ---------- 顶部返回栏 ---------- */
-  @Builder
+@Builder
   TopBar() {
     Row() {
       // 返回符用矢量箭头（CfBackIcon），不用字符 '‹'：
@@ -353,9 +322,7 @@ export struct ArticleDetailPage {
   private readMinutes(): number {
     return this.article === null ? 0 : this.article.readMinutes
   }
-
-  /* ---------- 文章头部：大图标 + 标题 + 标签 + 阅读数 ---------- */
-  @Builder
+@Builder
   ArticleHead() {
     Column({ space: Space.MD }) {
       // 大图标
@@ -412,9 +379,7 @@ export struct ArticleDetailPage {
     .borderRadius(Radius.LG)
     .shadow(this.tw(Shadow.card()))
   }
-
-  /* ---------- 正文：逐段渲染，保留 \n 分段，lineHeight 放宽 ---------- */
-  @Builder
+@Builder
   ArticleBody() {
     Column({ space: Space.LG }) {
       ForEach(this.paragraphs(), (p: string, i: number) => {
@@ -431,9 +396,7 @@ export struct ArticleDetailPage {
     .borderRadius(Radius.LG)
     .shadow(this.tw(Shadow.card()))
   }
-
-  /* ---------- 文末问答入口 ---------- */
-  @Builder
+@Builder
   QuizEntry() {
     Row({ space: Space.MD }) {
       CfIcon({ kind: 'ui', code: 'brain', iconSize: 26 })
@@ -461,15 +424,12 @@ export struct ArticleDetailPage {
       this.showQuiz = true
     })
   }
-
-  /* ---------- 底部互动条 ---------- */
-  @Builder
+@Builder
   ActionBar() {
     Row() {
       /*
        * ⚠️ 单元格必须是独立组件 + @Prop 传参，不能是 @Builder 按值传参：
        * @Builder 按值参数不随状态刷新（ArkUI 官方行为），
-       * 点赞后 liked/likeCount 变了单元格纹丝不动（用户实测命中）。
        * 组件化后父状态变化 → @Prop 同步 → 子组件立即重渲染。
        */
       ActionCellItem({
@@ -502,8 +462,8 @@ export struct ArticleDetailPage {
 }
 
 /**
+
  * 底部互动条单元格（点赞/收藏/分享共用）。
- * ------------------------------------------------------------------
  * 原为页面内 @Builder ActionCell 按值传参 —— 不随状态刷新，
  * 「点赞收藏不刷新」的根因；改独立组件 + @Prop 后点击即时变色变数。
  * 静态取色经 tc() 建立 themeTick 依赖（深色换血后强制重取）。

@@ -1,72 +1,28 @@
-/**
- * RDB 数据层（@kit.ArkData relationalStore，底层 SQLite）
- * ------------------------------------------------------------------
- * 为什么从 Preferences 搬到 RDB（2026-10-23 数据层重构）：
- *   Preferences 是「整文件 XML」模型 —— getPreferences 时整个文件解析进
- *   内存，每次 put + flush 又整文件重写。行为记录是**无上限增长**的
- *   数据集（一个账号几年就是几千条），全量加载的后果是：
- *     · 启动慢：文件越大解析越久，首屏等待肉眼可见；
- *     · 内存高：整份 JSON 常驻，还要叠加 JSON.parse 的临时对象；
- *     · 写入贵：记一笔就整文件重写一遍。
- *   RDB（SQLite）按页读取、支持索引/分页/事务，正好治这三点：
- *     · 聚合统计走 SQL 下推（SUM/COUNT），不用把记录捞进内存再算；
- *     · 列表走 ORDER BY + LIMIT/OFFSET 分页，拿多少读多少；
- *     · 写走单行 INSERT/DELETE，不再整文件重写。
- *
- * 数据分层口径（本文件只放业务数据，不放轻量配置）：
- *   RDB  ：carbon_record / carbon_coupon / task_claim / article_interact
- *          / backup_slot —— 全部按 user_key（账号命名空间）行级隔离；
- *   Preferences（仍由 LocalStore/AccountStore 持有）：登录态、账号表、
- *          种子标记、备份份数与时间、迁移标记等**少量键值**。
- *
- * 双后端设计（为什么要有内存态）：
- *   预览器（Previewer）不跑 UIAbility、拿不到应用上下文，getRdbStore
- *   与 getPreferences 都会抛错。store_ 为 null 时本类全部方法退化为
- *   纯内存数组（按 user_key 分桶），保证预览器里页面照常演示；
- *   真机正常情况下 store_ 必然就绪，走 SQL 路径。
- *   两条路径的方法签名完全一致，LocalStore 无需关心当前是哪种后端。
- *
- * ⚠️ ArkTS 严格模式注意：本文件不把函数类型用作字段/参数类型
- *   （见 LocalStore.syncEcoMood 注释里的踩坑记录），事务一律封装成
- *   「替换类」组合方法（begin → delete → batchInsert → commit）。
- */
+/** RDB 数据层（SQLite 后端）；store_ 为 null 时退化为内存态，供预览器使用 */
 import { relationalStore } from '@kit.ArkData'
 import { common } from '@kit.AbilityKit'
 import { ArticleInteract, LocalCoupon, LocalRecord, LocalTaskClaim } from '../MockStore'
 
-/** 数据库文件名（应用私有目录下） */
 const DB_NAME: string = 'carbon.db'
 
-/** 聚合统计的 SQL 下推结果（stats 的记录侧口径） */
+/** 聚合统计结果 */
 export interface RecordAgg {
-  /** 累计减排量 kgCO2e */
   totalKg: number
-  /** 今日减排量 */
   todayKg: number
-  /** 本月减排量 */
   monthKg: number
-  /** 累计获得积分（仅记录侧，不含任务奖励） */
   totalPoints: number
-  /** 记录条数 */
   recordCount: number
 }
 
-/** 列表页合计口径（summaryAgg 的下推结果，与分页解耦） */
+/** 列表页合计口径 */
 export interface RecordSummary {
-  /** 筛选后记录条数（全量，非已加载页） */
   recordCount: number
-  /** 筛选后有记录的天数 */
   dayCount: number
-  /** 筛选后累计减排量 */
   totalKg: number
-  /** 筛选后累计积分 */
   totalPoints: number
 }
 
-/**
- * 内存态单账号数据桶（仅 store_ 为 null 的预览器/降级场景使用）。
- * 结构刻意与 RDB 表一一对应，切换后端不改变语义。
- */
+/** 内存态单账号数据桶 */
 interface MemUserData {
   records: LocalRecord[]
   coupons: LocalCoupon[]
@@ -76,19 +32,11 @@ interface MemUserData {
 }
 
 export class CarbonRdb {
-  /** RDB 实例：null = 内存态（预览器/打开失败） */
   private static store_: relationalStore.RdbStore | null = null
-  /** 是否已尝试过打开（失败也置位，避免每次调用重试） */
   private static opened_: boolean = false
-  /** 内存态分账号数据桶 */
   private static memUsers_: Record<string, MemUserData> = {}
 
-  /* ================= 打开 / 建表 ================= */
-
-  /**
-   * 打开（必要时创建）数据库并建表建索引。
-   * 失败不抛异常：留 store_ = null，后续调用自动走内存态。
-   */
+  /** 打开数据库并建表；失败走内存态 */
   static async open(ctx: common.Context): Promise<void> {
     if (CarbonRdb.opened_) return
     CarbonRdb.opened_ = true
@@ -102,20 +50,14 @@ export class CarbonRdb {
       await CarbonRdb.createTables(store)
       CarbonRdb.store_ = store
     } catch (err) {
-      // 预览器/存储异常：退化为内存态，页面照常可用（不落盘）
       CarbonRdb.store_ = null
       CarbonRdb.memUsers_ = {}
     }
   }
 
-  /** 建表 + 建索引（IF NOT EXISTS，重复执行安全；随版本演进只加不改） */
+  /** 建表建索引 */
   private static async createTables(store: relationalStore.RdbStore): Promise<void> {
     const ddl: string[] = [
-      /*
-       * 行为记录：本应用唯一无上限增长的数据集。
-       * 索引全部带 user_key 前缀 —— 所有查询都按账号命名空间过滤，
-       * 前缀列命中索引，避免全表扫描。
-       */
       'CREATE TABLE IF NOT EXISTS carbon_record (' +
       'user_key TEXT NOT NULL,' +
       'record_id INTEGER NOT NULL,' +
@@ -135,15 +77,9 @@ export class CarbonRdb {
       'client_record_id TEXT NOT NULL,' +
       'update_time INTEGER NOT NULL,' +
       'sync_flag TEXT NOT NULL)',
-      // 日汇总 / 趋势分桶按 date_str；分类统计按 category；列表按 behavior_time
       'CREATE INDEX IF NOT EXISTS idx_record_user_date ON carbon_record (user_key, date_str)',
       'CREATE INDEX IF NOT EXISTS idx_record_user_cat ON carbon_record (user_key, category)',
       'CREATE INDEX IF NOT EXISTS idx_record_user_time ON carbon_record (user_key, behavior_time)',
-      /*
-       * 兑换券流水（对应服务端 carbon_exchange_order 的口径）。
-       * status 只落 'unused' / 'used'：'expired' 由调用方按时间推导
-       * （见 LocalStore.couponStatus），不把过期态写死。
-       */
       'CREATE TABLE IF NOT EXISTS carbon_coupon (' +
       'user_key TEXT NOT NULL,' +
       'coupon_id TEXT NOT NULL,' +
@@ -157,12 +93,7 @@ export class CarbonRdb {
       'status TEXT NOT NULL,' +
       'used_at INTEGER NOT NULL,' +
       'qr_content TEXT NOT NULL)',
-      // 券包页按领取时间倒序展示
       'CREATE INDEX IF NOT EXISTS idx_coupon_user ON carbon_coupon (user_key, issued_at)',
-      /*
-       * 每日任务领取记录：按 (user_key, date_str) 查「今天领过没有」，
-       * 跨天自然失效，不需要额外的清空逻辑。
-       */
       'CREATE TABLE IF NOT EXISTS task_claim (' +
       'user_key TEXT NOT NULL,' +
       'task_code TEXT NOT NULL,' +
@@ -170,7 +101,6 @@ export class CarbonRdb {
       'points INTEGER NOT NULL,' +
       'claim_time INTEGER NOT NULL)',
       'CREATE INDEX IF NOT EXISTS idx_task_user_date ON task_claim (user_key, date_str)',
-      // 文章互动（点赞/收藏）：一个账号最多几十篇，按 user_key 索引足够
       'CREATE TABLE IF NOT EXISTS article_interact (' +
       'user_key TEXT NOT NULL,' +
       'article_id INTEGER NOT NULL,' +
@@ -178,11 +108,6 @@ export class CarbonRdb {
       'faved INTEGER NOT NULL,' +
       'like_delta INTEGER NOT NULL)',
       'CREATE INDEX IF NOT EXISTS idx_article_user ON article_interact (user_key)',
-      /*
-       * 备份槽：单账号一行（payload 为 {records, coupons} 的 JSON 快照）。
-       * 备份是整份快照、只写不读（恢复时才读），放 RDB 而不是
-       * Preferences —— 后者又变成一份随数据增长的大 JSON，违背分层初衷。
-       */
       'CREATE TABLE IF NOT EXISTS backup_slot (' +
       'user_key TEXT NOT NULL,' +
       'payload TEXT NOT NULL,' +
@@ -193,12 +118,10 @@ export class CarbonRdb {
     }
   }
 
-  /** 当前是否 RDB 后端（false = 内存态，供日志/调试判断） */
+  /** 是否 RDB 后端 */
   static get persistent(): boolean {
     return CarbonRdb.store_ !== null
   }
-
-  /* ================= 内存态工具 ================= */
 
   /** 取（必要时新建）内存态账号桶 */
   private static memOf(userKey: string): MemUserData {
@@ -217,9 +140,6 @@ export class CarbonRdb {
     return m
   }
 
-  /* ================= 记录：行映射 ================= */
-
-  /** LocalRecord → ValuesBucket（列名 snake_case，与服务端 carbon.sql 口径对齐） */
   private static recordToBucket(userKey: string, r: LocalRecord): relationalStore.ValuesBucket {
     const vb: relationalStore.ValuesBucket = {
       user_key: userKey,
@@ -237,7 +157,6 @@ export class CarbonRdb {
       date_str: r.dateStr,
       record_source: r.recordSource,
       remark: r.remark,
-      // 老数据可能缺同步三件套：入库前补默认值，保证列非空
       client_record_id: r.clientRecordId === undefined ? '' : r.clientRecordId,
       update_time: r.updateTime === undefined ? 0 : r.updateTime,
       sync_flag: r.syncFlag === undefined ? 'local' : r.syncFlag
@@ -245,7 +164,6 @@ export class CarbonRdb {
     return vb
   }
 
-  /** ResultSet 当前行 → LocalRecord */
   private static rowToRecord(rs: relationalStore.ResultSet): LocalRecord {
     const rec: LocalRecord = {
       recordId: rs.getLong(rs.getColumnIndex('record_id')),
@@ -269,7 +187,6 @@ export class CarbonRdb {
     return rec
   }
 
-  /** 结果集 → 记录数组（读尽自动关闭） */
   private static readRecords(rs: relationalStore.ResultSet): LocalRecord[] {
     const out: LocalRecord[] = []
     if (rs.goToFirstRow()) {
@@ -281,9 +198,7 @@ export class CarbonRdb {
     return out
   }
 
-  /* ================= 记录：写 ================= */
-
-  /** 新增一条记录（单行 INSERT，不再整文件重写） */
+  /** 新增一条记录 */
   static async insertRecord(userKey: string, rec: LocalRecord): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -293,7 +208,7 @@ export class CarbonRdb {
     await store.insert('carbon_record', CarbonRdb.recordToBucket(userKey, rec))
   }
 
-  /** 批量入库（调用方已保证处于事务外的一次性写入，如迁移/灌种子） */
+  /** 批量入库 */
   static async insertRecords(userKey: string, recs: LocalRecord[]): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -310,7 +225,7 @@ export class CarbonRdb {
     }
   }
 
-  /** 更新一条记录（按 user_key + record_id 定位） */
+  /** 更新一条记录 */
   static async updateRecord(userKey: string, rec: LocalRecord): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -349,7 +264,7 @@ export class CarbonRdb {
     return n > 0
   }
 
-  /** 按 clientRecordId 删除（跨设备删除事件落地），返回是否删到 */
+  /** 按 clientRecordId 删除，返回是否删到 */
   static async deleteByClientId(userKey: string, uuid: string): Promise<boolean> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -369,11 +284,7 @@ export class CarbonRdb {
     return n > 0
   }
 
-  /**
-   * 事务内整体替换记录（清空 + 批量插入）。
-   * 用于：灌演示种子、恢复备份、Preferences→RDB 迁移 —— 三者都要求
-   * 「要么整体生效、要么整体回滚」，半途失败会留下口径矛盾的数据。
-   */
+  /** 事务内整体替换记录（清空 + 批量插入） */
   static async replaceRecords(userKey: string, recs: LocalRecord[]): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -397,9 +308,7 @@ export class CarbonRdb {
     }
   }
 
-  /* ================= 记录：读（按需 + 分页 + 聚合下推） ================= */
-
-  /** 全部记录（behavior_time 倒序，走索引排序） */
+  /** 全部记录 */
   static async allRecords(userKey: string): Promise<LocalRecord[]> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -412,7 +321,7 @@ export class CarbonRdb {
     return CarbonRdb.readRecords(rs)
   }
 
-  /** 按分类过滤（category 有 (user_key, category) 联合索引） */
+  /** 按分类过滤 */
   static async recordsOf(userKey: string, category: string): Promise<LocalRecord[]> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -449,7 +358,7 @@ export class CarbonRdb {
     return out.length > 0 ? out[0] : undefined
   }
 
-  /** 按 clientRecordId 取单条（跨设备合并定位用） */
+  /** 按 clientRecordId 取单条 */
   static async findByClientId(userKey: string, uuid: string): Promise<LocalRecord | undefined> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -467,11 +376,7 @@ export class CarbonRdb {
     return out.length > 0 ? out[0] : undefined
   }
 
-  /**
-   * 分页读记录（列表「加载更多」的数据源）。
-   * category 传空串表示全部；offset/limit 直接下推 SQL 的
-   * LIMIT/OFFSET —— 记录涨到几千条时首屏也只读一页。
-   */
+  /** 分页读记录 */
   static async recordsPage(userKey: string, category: string, offset: number, limit: number): Promise<LocalRecord[]> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -495,11 +400,7 @@ export class CarbonRdb {
     return CarbonRdb.readRecords(rs)
   }
 
-  /**
-   * 聚合统计（SQL 下推，一行出全部口径）。
-   * 条件聚合用 CASE WHEN：总计/今日/本月一次查完，避免三次往返；
-   * 本月匹配走 date_str LIKE 'yyyy-MM%'（date_str 有联合索引前缀）。
-   */
+  /** 聚合统计（SQL 下推） */
   static async statsAgg(userKey: string, todayStr: string, monthPrefix: string): Promise<RecordAgg> {
     const agg: RecordAgg = {
       totalKg: 0,
@@ -538,14 +439,7 @@ export class CarbonRdb {
     return agg
   }
 
-  /**
-   * 列表页合计口径（SQL 聚合下推，与分页解耦）。
-   * ------------------------------------------------------------------
-   * 分页读列表时，顶部「筛选后合计（条数/减排/积分/天数）」必须等于
-   * **全量筛选结果**而不是「已加载页累加」——否则记录多的时候合计
-   * 会随翻页变大，用户视角就是「数字在跳」。所以合计单独走一次
-   * COUNT/SUM（可带 category 条件），列表走分页，两个口径分离。
-   */
+  /** 列表页合计口径 */
   static async summaryAgg(userKey: string, category: string): Promise<RecordSummary> {
     const sum: RecordSummary = {
       recordCount: 0,
@@ -588,7 +482,7 @@ export class CarbonRdb {
     return sum
   }
 
-  /** 有记录的日期集合（连续打卡天数用；DISTINCT 下推，最多返回天数行） */
+  /** 有记录的日期集合 */
   static async distinctDates(userKey: string): Promise<string[]> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -612,7 +506,7 @@ export class CarbonRdb {
     return out
   }
 
-  /** 记录条数（种子判定 / hasData 用，COUNT(*) 不捞数据） */
+  /** 记录条数 */
   static async countRecords(userKey: string): Promise<number> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -629,7 +523,7 @@ export class CarbonRdb {
     return n
   }
 
-  /** 当前账号最大 recordId（撞号时重新分配用；无记录返回 0） */
+  /** 当前账号最大 recordId */
   static async maxRecordId(userKey: string): Promise<number> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -654,9 +548,8 @@ export class CarbonRdb {
     return max
   }
 
-  /* ================= 兑换券 ================= */
+  /* ---------- 兑换券 ---------- */
 
-  /** LocalCoupon → ValuesBucket */
   private static couponToBucket(userKey: string, c: LocalCoupon): relationalStore.ValuesBucket {
     const vb: relationalStore.ValuesBucket = {
       user_key: userKey,
@@ -675,7 +568,6 @@ export class CarbonRdb {
     return vb
   }
 
-  /** ResultSet 当前行 → LocalCoupon */
   private static rowToCoupon(rs: relationalStore.ResultSet): LocalCoupon {
     const c: LocalCoupon = {
       couponId: rs.getString(rs.getColumnIndex('coupon_id')),
@@ -723,7 +615,7 @@ export class CarbonRdb {
     await store.insert('carbon_coupon', CarbonRdb.couponToBucket(userKey, c))
   }
 
-  /** 更新一张券（核销置 used / 补 qrContent 时） */
+  /** 更新一张券 */
   static async updateCoupon(userKey: string, c: LocalCoupon): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -742,7 +634,7 @@ export class CarbonRdb {
     await store.update(CarbonRdb.couponToBucket(userKey, c), predicates)
   }
 
-  /** 事务内整体替换券（恢复备份 / 迁移用） */
+  /** 事务内整体替换券 */
   static async replaceCoupons(userKey: string, cps: LocalCoupon[]): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -766,7 +658,7 @@ export class CarbonRdb {
     }
   }
 
-  /* ================= 每日任务领取 ================= */
+  /* ---------- 每日任务领取 ---------- */
 
   /** 全部领取记录 */
   static async allClaims(userKey: string): Promise<LocalTaskClaim[]> {
@@ -808,7 +700,7 @@ export class CarbonRdb {
     await store.insert('task_claim', vb)
   }
 
-  /** 事务内整体替换领取记录（迁移 / 清空用） */
+  /** 事务内整体替换领取记录 */
   static async replaceClaims(userKey: string, claims: LocalTaskClaim[]): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -840,7 +732,7 @@ export class CarbonRdb {
     }
   }
 
-  /* ================= 文章互动 ================= */
+  /* ---------- 文章互动 ---------- */
 
   /** 全部互动状态 → { articleId: 状态 } */
   static async articleMap(userKey: string): Promise<Record<string, ArticleInteract>> {
@@ -866,7 +758,6 @@ export class CarbonRdb {
     return out
   }
 
-  /** 互动字典浅拷贝（快照与返回副本共用） */
   private static copyArticle(src: Record<string, ArticleInteract>): Record<string, ArticleInteract> {
     const out: Record<string, ArticleInteract> = {}
     const keys: string[] = Object.keys(src)
@@ -876,7 +767,7 @@ export class CarbonRdb {
     return out
   }
 
-  /** 写入单条互动状态（DELETE + INSERT 两语句，无主键约束下的幂等写法） */
+  /** 写入单条互动状态（幂等） */
   static async upsertArticle(userKey: string, articleId: number, st: ArticleInteract): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -891,7 +782,7 @@ export class CarbonRdb {
       [userKey, articleId, st.liked ? 1 : 0, st.faved ? 1 : 0, st.likeDelta])
   }
 
-  /** 事务内整体替换互动状态（迁移用） */
+  /** 事务内整体替换互动状态 */
   static async replaceArticle(userKey: string, map: Record<string, ArticleInteract>): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -917,9 +808,9 @@ export class CarbonRdb {
     }
   }
 
-  /* ================= 备份槽 ================= */
+  /* ---------- 备份槽 ---------- */
 
-  /** 写入备份快照（同账号只保留一行：先删后插） */
+  /** 写入备份快照（同账号只保留一行） */
   static async saveBackup(userKey: string, payload: string): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -932,7 +823,7 @@ export class CarbonRdb {
       [userKey, payload, Date.now()])
   }
 
-  /** 读备份快照（无备份返回空串） */
+  /** 读备份快照 */
   static async loadBackup(userKey: string): Promise<string> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -949,15 +840,9 @@ export class CarbonRdb {
     return payload
   }
 
-  /* ================= 账号级清理 ================= */
+  /* ---------- 账号级清理 ---------- */
 
-  /**
-   * 清空一个账号的业务数据（记录 + 券 + 任务领取）。
-   * ⚠️ 不清 article_interact：与旧版 clear() 口径一致（「清空数据」
-   *    只清行为与资产，点赞收藏属于阅读偏好，不随清空回退）。
-   * 单事务：三类数据要么全清要么全不清，避免出现「记录没了券还在」
-   *    的口径矛盾。
-   */
+  /** 清空账号业务数据（记录+券+任务领取，不清文章互动） */
   static async clearUser(userKey: string): Promise<void> {
     const store: relationalStore.RdbStore | null = CarbonRdb.store_
     if (store === null) {
@@ -985,12 +870,7 @@ export class CarbonRdb {
     }
   }
 
-  /**
-   * 事务内整体替换「记录 + 券（+ 可选任务领取）」（恢复备份用）。
-   * 备份是跨表快照，多表必须同事务落地，否则恢复一半会丢券/丢任务分。
-   * claims 不传时完全不触碰 task_claim：v1/v2 旧备份没有任务字段，
-   * 由 LocalStore 保留当前领取记录并按全部任务积分重算余额。
-   */
+  /** 事务内整体替换记录+券+可选任务领取（恢复备份用） */
   static async replaceUserData(
     userKey: string,
     recs: LocalRecord[],

@@ -17,8 +17,8 @@ interface CategoryTab {
 }
 
 /**
+
  * P09 碳排放因子库
- * ------------------------------------------------------------------
  * 路由名：FACTOR_LIB（NavDestination，PageMap 集中注册）
  * 真实实现：全部 + 四大类分栏，每项因子一张卡（图标/名称/单位/因子值/默认量）
  * 点击卡片唤起行为录入面板，并把该因子预选
@@ -63,10 +63,7 @@ export struct FactorLibPage {
       this.factors = []
     }
   }
-
-  /* ---------- 展示辅助 ---------- */
-
-  /** 当前分栏下的因子 */
+/** 当前分栏下的因子 */
   private visible(): LocalFactor[] {
     if (this.tab === 'all') return this.factors
     return this.factors.filter((f: LocalFactor): boolean => f.category === this.tab)
@@ -84,10 +81,7 @@ export struct FactorLibPage {
   private previewKg(f: LocalFactor): number {
     return Math.round(f.factorValue * f.defaultAmount * 1000) / 1000
   }
-
-  /* ---------- 交互 ---------- */
-
-  private pickTab(key: string): void {
+private pickTab(key: string): void {
     if (this.tab === key) return
     this.tab = key
   }
@@ -99,12 +93,8 @@ export struct FactorLibPage {
     AppStorage.set('showAddSheet', true)
     toast('已带入「' + f.itemName + '」，填写数量即可记录')
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -115,6 +105,7 @@ export struct FactorLibPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -124,18 +115,7 @@ export struct FactorLibPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -148,6 +128,7 @@ export struct FactorLibPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -243,9 +224,7 @@ export struct FactorLibPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 顶部 5 个分栏 ---------- */
-  @Builder
+@Builder
   TabBar() {
     Scroll() {
       Row({ space: Space.SM }) {
@@ -284,9 +263,7 @@ export struct FactorLibPage {
     .shadow(this.tab === key ? this.tw(Shadow.brand()) : this.tw(Shadow.card()))
     .onClick((): void => this.pickTab(key))
   }
-
-  /* ---------- 说明条 ---------- */
-  @Builder
+@Builder
   HintBar() {
     Row({ space: Space.MD }) {
       Row()
@@ -303,9 +280,7 @@ export struct FactorLibPage {
     .width('100%')
     .padding({ top: Space.XS, bottom: Space.XS })
   }
-
-  /* ---------- 单个因子卡 ---------- */
-  @Builder
+@Builder
   FactorCard(f: LocalFactor) {
     Column({ space: Space.MD }) {
       Row({ space: Space.MD }) {

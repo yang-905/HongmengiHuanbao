@@ -18,7 +18,6 @@ import { CfIcon } from '../../ui/Icon';
 
 /*
  * P35 核销成功凭证页（P34 碳惠券包 → 核销后进入）
- * ------------------------------------------------------------------
  * 用户诉求：二维码不再挤在详情弹窗里，独立成页做成「感谢仪式」——
  *   · 大号核销成功徽章 + 「感谢您的低碳生活」主文案
  *   · 核销时间大字展示（= usedAt，AppClock 系统时钟口径，与核销码同源）
@@ -26,7 +25,6 @@ import { CfIcon } from '../../ui/Icon';
  *     LocalStore.buildQr），微信/相机扫一扫直接展示文本，任何手机都
  *     能读（URL 方案不可取：会跳到不存在的域名；容量红线见 buildQr）
  * 已核销的券从列表回看也进本页（usedAt / qrContent 均持久化，幂等）。
- *
  * 入场动画对齐券详情弹窗口径：徽章弹簧弹入（springMotion）、
  * 内容步进浮入（220ms EaseOut）—— TransitionEffect 常量与 GlassDialog
  * 同款（独立声明：跨文件共享需再抽 ui 层，两处复制成本更低）。
@@ -102,10 +100,7 @@ export struct CouponRedeemPage {
       this.ready = false
     }
   }
-
-  /* ---------- 展示格式 ---------- */
-
-  /** 核销时间（大字）：usedAt 毫秒戳 → 'yyyy-MM-dd HH:mm:ss'，系统时钟口径 */
+/** 核销时间（大字）：usedAt 毫秒戳 → 'yyyy-MM-dd HH:mm:ss'，系统时钟口径 */
   private redeemTimeStr(): string {
     if (this.coupon.usedAt > 0) {
       const d: Date = new Date(this.coupon.usedAt)
@@ -121,6 +116,7 @@ export struct CouponRedeemPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -207,10 +203,7 @@ export struct CouponRedeemPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 核销成功感谢主体 ---------- */
-
-  @Builder
+@Builder
   RedeemBody() {
     // ✓ 大徽章：品牌绿圆盘 + 白勾 + 外发光，弹簧弹入（springMotion）
     Column() {

@@ -9,6 +9,7 @@ import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * P03 首页看板（Tab1）
  * 真实实现：减排总览 + 等级进度 + 今日重点 + 任务进度 + 趋势 + 快捷入口
  * 数据来源 DataSource（服务端优先，本地兜底）
@@ -44,6 +45,7 @@ export struct DashboardPage {
   @State private online: boolean = true
 
   /**
+
    * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时本页自动重渲染，
    * 全应用背景色保持同步，不会出现「上一页绿、下一页黄」的跳变。
@@ -51,6 +53,7 @@ export struct DashboardPage {
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 这个自增序号，
    * 页面订阅它即可在「记录 → 切回看板」时立刻重算档位，
@@ -61,21 +64,9 @@ export struct DashboardPage {
   private scroller: Scroller = new Scroller()
 
   /**
+
    * 刷新中的并发锁 + 节流。
-   * ------------------------------------------------------------------
-   * ⚠️ 为什么需要（用户诉求「每次上传记录后自动刷新」）：
-   *本页有**三条**刷新触发路径，且可能同时命中：
-   *   ① onStorageChange('ecoTick') —— 记完行为立即广播
-   *   ② onPageShow()—— 切回 Tab
-   *   ③ 用户手点刷新按钮
-   * 早前没有锁：连续记两笔会并发跑两遍 load()，而 load() 内部是
-   * 6 个**串行 await** 的存储读取（overview/tasks/focus/tips/
-   * trend/badges）。并发时后返回的那次可能带着**旧快照**覆盖新数据，
-   * 表现为「明明记了，首页数字却回退了一档」。
-   *
-   * 现在：inFlight 期间的后续触发**折叠成一次 pending**（本次结束后补拉），
-   * 节流窗口内的手动点击忽略 —— 数据本来就是刚拉过的，再拉一次只是白耗 IO。
-   */
+ */
   private inFlight: boolean = false;
   /** 飞行期间到达的刷新请求（数据真的变了才有），本次 load 结束后补拉一次 */
   private loadPending: boolean = false;
@@ -83,10 +74,7 @@ export struct DashboardPage {
   private lastLoadAt: number = 0;
   /** 节流窗口：太短挡不住连续记录，太长会让手动刷新「没反应」 */
   private static readonly THROTTLE_MS: number = 600;
-
-  /* ---------- 苹果式动效：步进入场 + 数字滚动 + 格子按压 ---------- */
-
-  /** 入场信号：首帧渲染后置 true，各分区按 delay 依次浮入（STEP_IN 同观感） */
+/** 入场信号：首帧渲染后置 true，各分区按 delay 依次浮入（STEP_IN 同观感） */
   @State private entered: boolean = false
   /** 入场定时器 id，-1 表示未运行 */
   private entranceTimer: number = -1
@@ -117,18 +105,7 @@ export struct DashboardPage {
   /** 记录信号变化 → 重算档位（背景随即过渡到新颜色） */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -143,6 +120,7 @@ export struct DashboardPage {
   }
 
   /**
+
    * 页面重新可见时刷新。
    * 关键场景：用户在「记录」Tab 记完一笔低碳行为再切回看板，
    * 当日碳排放会变化 → 情绪档位必须跟着重算，
@@ -156,6 +134,7 @@ export struct DashboardPage {
   private static readonly NUM_ROLL_MS: number = 720;
 
   /**
+
    * 苹果式数字滚动：Hero 大数字 + 四项小数据从当前展示值续滚到新值。
    * 从**展示值**（而非上一帧目标值）起步：滚动中途刷新数据不跳变；
    * 整数位用 Math.round 抖动最小化，kg 保留两位小数由 toFixed 处理。
@@ -195,8 +174,8 @@ export struct DashboardPage {
   }
 
   /**
+
    * 拉取首页全部数据。
-   *
    * @param force true = 数据源已变化（ecoTick / 页面回前台），跳过节流；
    *              false = 用户手动点击，遵守节流窗口。
    */
@@ -257,10 +236,7 @@ export struct DashboardPage {
       this.numTimer = -1
     }
   }
-
-  /* ---------- 情绪主题取色（页面只消费，不做判定） ---------- */
-
-  /** 主视觉渐变起色 */
+/** 主视觉渐变起色 */
   /**
    * 主视觉渐变起始色。
    * 深色模式切到 heroFrom（深绿玻璃调）：EcoMood.*_FROM/TO 是浅色套值、
@@ -337,12 +313,9 @@ export struct DashboardPage {
   }
 
   /**
+
    * 近 7 天迷你柱高度：按最大值归一化，最高 78vp、最矮 6vp（始终可见）。
-   * 78vp 是配合 150vp 卡高、98vp 固定柱区的预算上限：
-   *   柱区 98 = 数值预留 13 + 柱高 78 + 顶部余量 7，
-   *   卡片内容区 118 = 柱区 98 + 间距 4 + 日期标签 ~14 + 余量 2，
-   * 任何柱子都不会把槽位撑高而导致基线错位。
-   */
+ */
   private miniBarH(kg: number): number {
     const h: number = (kg / this.trendMax()) * 78
     return Math.max(6, Math.min(78, h))
@@ -418,12 +391,10 @@ export struct DashboardPage {
     .height('100%')
     /*
      * ⚠️ themeTick 恒读钩子必须挂在**本 Scroll 根容器**上（不能只在内部 Column）。
-     *
      * 与 MinePage 同一个根因：`backgroundColor(EcoTheme.bgSolid(...))` 挂在
      * Scroll 上，而 themeTick 只在 Scroll 内部的 Column（第 291 行）被读取。
      * 换血推 themeTick 时 Scroll 自身不重建 → 背景色停留在建页时的浅色值，
      * 于是「看板」在深色模式下仍是浅色，而记录/科普是深色。
-     *
      * 记录/科普正常是因为它们的条目额外订阅了 themeTick，条目重建
      * 把父级一起带上；本页条目没有这层订阅。值恒为 1，无视觉影响。
      */
@@ -439,9 +410,7 @@ export struct DashboardPage {
     .backgroundColor(this.tc(EcoTheme.bg(this.ecoLevel)))
     .animation({ duration: AppleMotion.THEME_MS, curve: AppleMotion.EASE })
   }
-
-  /* ---------- 顶部问候：文案随碳档位变化 ---------- */
-  @Builder
+@Builder
   Header() {
     Row() {
       Column({ space: 3 }) {
@@ -486,14 +455,9 @@ export struct DashboardPage {
   }
 
   /**
+
    * 生态状态卡 —— 情绪化反馈的核心载体
-   * ------------------------------------------------------------------
-   * 把「今日碳足迹 vs 阈值」做成一个可视化的情绪面板：
-   *   · 左侧大字是档位（生态极佳 / 接近阈值…）+ 情绪化描述
-   *   · 右侧环形进度直观呈现今日碳预算消耗度
-   *   · 超阈值时额外出现行动建议
-   * 背景与图标都取自 EcoTheme，与页面主视觉同一套色，视觉统一。
-   */
+ */
   @Builder
   EcoMoodCard() {
     Row({ space: Space.LG }) {
@@ -582,7 +546,6 @@ export struct DashboardPage {
           .fontWeight(FontWeight.Bold)
           .fontColor(this.moodAccent())
           // 数字光晕已移除：预览器把 Text 阴影渲染成文字包围盒矩形，
-          // 高减排档位下呈现为一圈深色「筐」（2026-10-21 用户反馈）
           .maxLines(1)
         Text('kg')
           .fontSize(9)
@@ -595,9 +558,7 @@ export struct DashboardPage {
     .height(72)
     .flexShrink(0)
   }
-
-  /* ---------- 主视觉：减排总览 + 等级 ---------- */
-  @Builder
+@Builder
   HeroCard() {
     Column({ space: Space.MD }) {
       Row() {
@@ -614,7 +575,6 @@ export struct DashboardPage {
               .fontWeight(FontWeight.Bold)
               .fontColor('#FFFFFF')
               // 数字光晕已移除：预览器把 Text 阴影渲染成文字包围盒矩形，
-              // 高减排档位下呈现为一圈深色「筐」（2026-10-21 用户反馈）
             Text('kg')
               .fontSize(FontSize.BODY)
               .fontColor('rgba(255,255,255,0.9)')
@@ -717,9 +677,7 @@ export struct DashboardPage {
     .shadow(this.tw(Shadow.brand()))
     .animation({ duration: AppleMotion.THEME_MS, curve: AppleMotion.EASE })
   }
-
-  /* ---------- 快捷入口 ---------- */
-  @Builder
+@Builder
   QuickGrid() {
     // 用 Row + layoutWeight 显式分列替代 Grid：columnsTemplate 的列宽约束
     // 传不到子 Text，格子会被压成内容宽度，文字被系统字体放大后逐字竖排。
@@ -805,9 +763,7 @@ export struct DashboardPage {
     })
     .onClick((): void => this.go(route))
   }
-
-  /* ---------- 今日重点（智慧服务） ---------- */
-  @Builder
+@Builder
   FocusCard() {
     if (this.focus !== null) {
       Column({ space: Space.MD }) {
@@ -835,9 +791,7 @@ export struct DashboardPage {
       .width('100%')
     }
   }
-
-  /* ---------- 近 7 天趋势（迷你柱状） ---------- */
-  @Builder
+@Builder
   WeekTrend() {
     Column({ space: Space.MD }) {
       CfSection({ title: '近 7 天减排', more: '查看趋势 ›', onMoreTap: (): void => this.go(RouteName.TREND_CHART) })
@@ -904,9 +858,7 @@ export struct DashboardPage {
     }
     .width('100%')
   }
-
-  /* ---------- 每日任务 ---------- */
-  @Builder
+@Builder
   TaskSection() {
     Column({ space: Space.MD }) {
       CfSection({ title: '每日任务', more: '任务中心 ›', onMoreTap: (): void => this.go(RouteName.TASK_CENTER) })
@@ -948,9 +900,7 @@ barHeight: 6
     }
     .width('100%')
   }
-
-  /* ---------- 智慧建议 ---------- */
-  @Builder
+@Builder
   TipSection() {
     if (this.tips.length > 0) {
       Column({ space: Space.MD }) {

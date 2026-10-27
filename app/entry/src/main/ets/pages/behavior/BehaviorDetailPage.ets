@@ -15,8 +15,8 @@ interface BehaviorDetailParam {
 }
 
 /**
+
  * P08 记录详情
- * ------------------------------------------------------------------
  * 路由名：BEHAVIOR_DETAIL（NavDestination，PageMap 集中注册）
  * 真实实现：大图标 + 行为快照 + 因子核算口径 + 来源说明 + 底部删除
  */
@@ -42,7 +42,6 @@ export struct BehaviorDetailPage {
   /**
    * ⚠️ 原 `barEntered`（删除条入场动画状态）已删除。
    * 它住在本页，而删除条现已渲染在 Index 的底部栏覆盖层里 ——
-   * 状态与组件不同属，动画彻底失效（用户反馈「弹出太快了」）。
    * 动画状态已迁到 Index 的 `slotDeleteIn`，与删除条同组件。
    */
   /** 页面已消失标志：setTimeout 回弹栈前判断，防用户快速返回时二次 pop */
@@ -73,6 +72,7 @@ export struct BehaviorDetailPage {
   }
 
   /**
+
    * Index 里删除条被点击 → 转发为删除确认。
    * （删除条 UI 在 Index，故点击信号也走 AppStorage 回传本页。）
    */
@@ -97,7 +97,6 @@ export struct BehaviorDetailPage {
        * ⚠️ 兜底：没有拿到 id（或 id 对应的记录已被删除）时，
        * 退而展示**最新一条**记录，而不是给用户一片空白加一句
        * 「记录不存在」——那既不好看，也无法自证页面是否正常。
-       *
        * 真实起因：设置页「低碳记录」入口直接 push 本页却没传
        * detailRecordId（早前的死路），用户在设置里点进来必然空态。
        * 入口已改为 goWithParam 传真实 id，这里是第二道保险：
@@ -118,10 +117,7 @@ export struct BehaviorDetailPage {
       // DataSource 内部已兜底
     }
   }
-
-  /* ---------- 展示辅助 ---------- */
-
-  private fmtNum(n: number): string {
+private fmtNum(n: number): string {
     const v: number = Math.round(n * 100) / 100
     if (Math.abs(v - Math.round(v)) < 0.001) {
       return '' + Math.round(v)
@@ -158,10 +154,7 @@ export struct BehaviorDetailPage {
     return this.fmtNum(this.record.amount) + ' ' + this.record.unit +
       ' × ' + this.factor.factorValue + ' = ' + this.fmtNum(this.record.reduceKg) + ' kg'
   }
-
-  /* ---------- 删除 ---------- */
-
-  private confirmDelete(): void {
+private confirmDelete(): void {
     if (this.record === null || this.deleting) return
     // AlertDialog.show 自 API 18 起废弃，改用 Toast.confirmWith（内部走 UIContext.getPromptAction）
     Toast.confirmWith(
@@ -217,12 +210,8 @@ export struct BehaviorDetailPage {
      */
     AppStorage.setOrCreate<boolean>('barSlotDelete', false)
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -233,6 +222,7 @@ export struct BehaviorDetailPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -242,18 +232,7 @@ export struct BehaviorDetailPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -266,6 +245,7 @@ export struct BehaviorDetailPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -320,17 +300,14 @@ export struct BehaviorDetailPage {
 
             /*
              * 底部删除条：从右侧「＋」圆钮弹出的**液态玻璃**悬浮胶囊。
-             * ------------------------------------------------------------------
              * 用户诉求：「改成从右边加号弹出的动画，让他属于从导航栏出来的液态玻璃效果，
              *          白色底层去掉，做成和一级页面的导航栏一样」。
-             *
              * 改前的问题（两张截图对照）：
              *   ① 底下压着一条 `Neutral.CARD`（**不透明纯白**）实心横条，
              *      与一级页面底部那条玻璃胶囊**完全两套语言** —— 一进二级页
              *      导航栏质感突然消失，像掉回了原生页面；
              *   ② 删除按钮孤零零占满整行，没有来由 —— 用户看不出它属于
              *      底部导航体系。
-             *
              * 改后的口径（与 Index 底部胶囊完全一致）：
              *   · 材质：`GlassLight.surface(BOTTOM_BAR_BG, PILL)` 单层 135° 合成渐变
              *     + `backdropBlur` + 四边异色描边 + `shadowOf(PILL)`，
@@ -341,7 +318,6 @@ export struct BehaviorDetailPage {
              *     缩放 0.6→1、透明度 0→1，与 Index 里胶囊退出时
              *     「被 ＋ 钮吸进去」是同一条运动曲线（Friction 收尾），
              *     所以视觉上是"＋ 钮把这条胶囊吐出来"，而不是凭空出现。
-             *
              * ⚠️ 布局要点：不能再用 `.width('100%')` 的实心条，
              *   必须是「左右留边距 + 悬浮」的胶囊，否则左右两端会贴到屏幕边缘，
              *   玻璃的圆角与描边就退化成直角，观感立刻变回"白条"。
@@ -349,14 +325,11 @@ export struct BehaviorDetailPage {
             /*
              * ⚠️ 删除条**不再在本页渲染**（用户诉求「导航条消失后，
              *   让同尺寸的删除按键代替导航条的位置」）。
-             *
              * 原来它渲染在本页布局里 —— 而导航胶囊在 Index 的底部栏，
              * 两者是**不同父容器**，所以删除条只能「自己另占一行」，
              * 永远填不进导航条退场后留下的空位（截图里就是条与胶囊错位）。
-             *
              * 删除条已完全移出本页（改由 Index 的底部栏插槽渲染，见
              * `aboutToAppear` 的 `barSlotDelete` flag），本页**不再需要**任何占位元素。
-             *
              * ⚠️ 这里曾多写了一个空的 `Column().layoutWeight(1)` 想"给滚动区留底"，
              *   结果它与上面的 Scroll **抢 layoutWeight** → Scroll 被压到只剩
              *   HeroCard 那么高，「行为快照」「记录来源」两个区块整块看不见
@@ -411,9 +384,7 @@ export struct BehaviorDetailPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 主视觉：大图标 + 名称 ---------- */
-  @Builder
+@Builder
   HeroCard() {
     Column({ space: Space.MD }) {
       Column() {
@@ -489,9 +460,7 @@ export struct BehaviorDetailPage {
     .borderRadius(Radius.LG)
     .shadow(this.tw(Shadow.card()))
   }
-
-  /* ---------- 行为快照 ---------- */
-  @Builder
+@Builder
   Snapshot() {
     Column({ space: Space.MD }) {
       CfSection({ title: '行为快照' })
@@ -542,9 +511,7 @@ export struct BehaviorDetailPage {
     .width('100%')
     .padding({ top: Space.MD, bottom: Space.MD })
   }
-
-  /* ---------- 记录来源 ---------- */
-  @Builder
+@Builder
   SourceCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '记录来源' })

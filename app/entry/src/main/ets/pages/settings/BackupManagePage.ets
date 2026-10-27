@@ -10,14 +10,8 @@ import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
 /**
+
  * P25 数据备份与恢复（单机版）
- * ------------------------------------------------------------------
- * 本工程已明确「不使用云服务器」，因此这里只保留纯本机的数据管理：
- * - 本地数据统计（记录数 / 减排量 / 积分 / 因子库）
- * - 备份：把当前记录快照到 Preferences 的备份槽
- * - 恢复：从备份槽还原
- * - 清空：删除全部本地数据
- * 路由名：BACKUP_MANAGE（由 PageMap 集中注册 NavDestination）
  */
 @Component
 export struct BackupManagePage {
@@ -64,10 +58,7 @@ export struct BackupManagePage {
     const list = await DataSource.factors()
     this.factorCount = list.length
   }
-
-  /* ---------- 备份 / 恢复 / 清空 ---------- */
-
-  private doBackup(): void {
+private doBackup(): void {
     if (this.backing) return
     this.backing = true
     LocalStore.backup().then((n: number): void => {
@@ -136,12 +127,8 @@ export struct BackupManagePage {
       toast('已恢复演示数据')
     })
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -152,6 +139,7 @@ export struct BackupManagePage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -161,18 +149,7 @@ export struct BackupManagePage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -185,6 +162,7 @@ export struct BackupManagePage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -268,9 +246,7 @@ export struct BackupManagePage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 本地数据统计 ---------- */
-  @Builder
+@Builder
   LocalStatCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '本机数据' })
@@ -361,9 +337,7 @@ export struct BackupManagePage {
     }
     .width('100%')
   }
-
-  /* ---------- 备份 / 恢复 / 清空 ---------- */
-  @Builder
+@Builder
   ActionCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '备份与恢复' })
@@ -417,9 +391,7 @@ export struct BackupManagePage {
     .borderRadius(Radius.MD)
     .onClick((): void => act())
   }
-
-  /* ---------- 单机版说明 ---------- */
-  @Builder
+@Builder
   DeviceCard() {
     Column({ space: Space.MD }) {
       CfSection({ title: '运行模式' })
@@ -443,9 +415,7 @@ export struct BackupManagePage {
     }
     .width('100%')
   }
-
-  /* ---------- 说明 ---------- */
-  @Builder
+@Builder
   TipCard() {
     CfCard({ pad: Space.LG }) {
       Column({ space: Space.SM }) {
@@ -475,9 +445,7 @@ export struct BackupManagePage {
       .alignItems(HorizontalAlign.Start)
     }
   }
-
-  /* ---------- 信息行 ---------- */
-  @Builder
+@Builder
   InfoLine(label: string, value: string) {
     Row() {
       Text(label)

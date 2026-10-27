@@ -23,6 +23,7 @@ import { AppleMotion } from '../../ui/AppleMotion'
 import { Clipboard } from '../../utils/Clipboard'
 
 /**
+
  * 我的页入口项：ArkTS 严格模式下对象字面量必须对应显式类型，故声明 class
  */
 class MineEntry {
@@ -59,13 +60,8 @@ class MineGroup {
 }
 
 /**
+
  * P06 我的（Tab4）
- * ------------------------------------------------------------------
- * 真实实现：顶部用户卡（头像 + 昵称 + 等级药丸 + 连续打卡）
- *          + 数据概览四宫格（累计减排 / 可用积分 / 徽章数 / 植树棵数）
- *          + 我的证书与徽章缩览
- *          + 分组入口列表（证书夹 / 收藏 / 家庭 / 智慧建议 / 超级终端 / 设置）
- * Tab 根内容，不进导航栈（由 Index 的 Tabs 承载）
  */
 @Component
 export struct MinePage {
@@ -120,10 +116,7 @@ export struct MinePage {
   private loadProfile(): void {
     this.profile = AccountStore.profileOf(AccountStore.currentUser())
   }
-
-  /* ---------- 口径 ---------- */
-
-  /** 等级进度百分比 */
+/** 等级进度百分比 */
   private levelPct(): number {
     const r: number[] = Biz.levelRange(this.ov.level)
     const span: number = r[1] - r[0];
@@ -161,20 +154,11 @@ export struct MinePage {
   }
 
   /**
+
    * 可用兑换券数（未使用且未过期）——「碳惠券包」入口角标。
-   * 口径与券包页概览卡一致：expired 由时间现算，不落盘。
-   * ⚠️ 光有 @State 不够（历史踩坑记录）：@State 赋值确实会让 build 重新
-   *   执行、groups() 产出带新「N 张」文案的新数组，但 ForEach 的键
-   *   （原为 g.title / it.title，稳定不变）命中复用 → itemGenerator
-   *   不重新执行 → 行内文案冻结在首帧值（用户实测：兑换成功后仍显示
-   *   0 张）。真正修好在 EntryList/GroupBlock 两处 ForEach 的键里掺入
-   *   right 动态文案 —— 键变 → 行重建，赋值才能落到 UI。
-   */
+ */
   @State private couponCount: number = 0
-
-  /* ---------- 入口定义 ---------- */
-
-  private groups(): MineGroup[] {
+private groups(): MineGroup[] {
     const g: MineGroup[] = []
     g.push(new MineGroup('我的低碳资产', [
       new MineEntry('coin', '碳积分', '积分余额 · 流水 · 权益兑换', RouteName.POINTS_HOME,
@@ -200,10 +184,7 @@ export struct MinePage {
     ]))
     return g
   }
-
-  /* ---------- 交互 ---------- */
-
-  private go(route: string): void {
+private go(route: string): void {
     AppRouter.pathStack.pushPathByName(route, null)
   }
 
@@ -216,6 +197,7 @@ export struct MinePage {
   }
 
   /**
+
    * 分享成绩单：把演示文案写入系统剪贴板并给出反馈（真复制，见 Clipboard）。
    * 文案异步生成（统计走 RDB 聚合查询，2026-10-23）：.then 链式消费，
    * 同步点击回调里不等候。
@@ -243,6 +225,7 @@ export struct MinePage {
   }
 
   /**
+
    * 券变更信号（响应式）：兑换 / 核销后 LocalStore.bumpCouponTick +1，
    * 本页据此重拉 —— 「兑完券回到我的，入口角标立刻多一张」靠它。
    * 只订阅 @StorageLink 不够（ArkUI 无 onStorageChange 生命周期），
@@ -253,12 +236,8 @@ export struct MinePage {
   onCouponTick(): void {
     this.load()
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -269,6 +248,7 @@ export struct MinePage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -278,18 +258,7 @@ export struct MinePage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -334,21 +303,16 @@ export struct MinePage {
     .height('100%')
     /*
      * ⚠️ themeTick 恒读钩子必须挂在**本 Scroll 根容器**上（不能只在内部 Column）。
-     *
-     * 用户反馈「深色模式下我的和看板显示与记录科普不一致」：
      * 记录/科普是深色，这两个页仍是浅色。
-     *
      * 根因：`.backgroundColor(EcoTheme.bgSolid(...))` 挂在 Scroll 上，
      * 而 themeTick 的读取钩子只写在 Scroll **内部的 Column**。
      * 换血时 AppStorage 推 themeTick → 只有订阅它的组件会重建，
      * Scroll 自身没订阅 → **背景色停留在建页那一刻的旧值（浅色）**。
      * 截图特征完全吻合：顶部安全区是深色（Index 根层重建了），
      * 正文却浅色（本页根没重建）。
-     *
      * 记录/科普之所以正常，是因为它们的**条目**额外订阅了 themeTick，
      * 条目重建把父级一起带上了；MinePage / DashboardPage 的条目没有
      * 这层订阅，所以只有它俩出问题。
-     *
      * 值恒为 1，无视觉影响，只为触发本组件重建、重新读取 static 色值。
      */
     .opacity(this.themeTick >= 0 ? 1 : 0)
@@ -369,9 +333,7 @@ export struct MinePage {
     .border({ width: { top: 1 }, color: this.tc(EcoMood.edgeOf(this.ecoLevel)) })
     .animation({ duration: AppleMotion.THEME_MS, curve: AppleMotion.EASE })
   }
-
-  /* ---------- 顶部问候 ---------- */
-  @Builder
+@Builder
   Header() {
     Row() {
       Column({ space: 3 }) {
@@ -394,9 +356,7 @@ export struct MinePage {
     }
     .width('100%')
   }
-
-  /* ---------- 用户卡：头像 + 昵称 + 等级 + 连续打卡 ---------- */
-  @Builder
+@Builder
   UserCard() {
     Column({ space: Space.LG }) {
       Row() {
@@ -485,9 +445,7 @@ export struct MinePage {
     .borderRadius(Radius.XL)
     .shadow(this.tw(Shadow.brand()))
   }
-
-  /* ---------- 数据概览四宫格 ---------- */
-  @Builder
+@Builder
   StatGrid() {
     Column({ space: Space.MD }) {
       Row({ space: Space.MD }) {
@@ -542,9 +500,7 @@ export struct MinePage {
     }
     .width('100%')
   }
-
-  /* ---------- 资产缩览：徽章 + 证书 ---------- */
-  @Builder
+@Builder
   AssetBlock() {
     Column({ space: Space.MD }) {
       // 徽章缩览
@@ -649,9 +605,7 @@ export struct MinePage {
     }
     .width('100%')
   }
-
-  /* ---------- 分组入口列表 ---------- */
-  @Builder
+@Builder
   EntryList() {
     Column({ space: Space.LG }) {
       ForEach(this.groups(), (g: MineGroup) => {
@@ -705,9 +659,7 @@ export struct MinePage {
     }
     .width('100%')
   }
-
-  /* ---------- 快捷入口：设置 / 关于 ---------- */
-  @Builder
+@Builder
   QuickLinks() {
     Row({ space: Space.SM }) {
       Column() {
@@ -734,9 +686,7 @@ export struct MinePage {
     }
     .width('100%')
   }
-
-  /* ---------- 底部说明 ---------- */
-  @Builder
+@Builder
   FooterNote() {
     Column({ space: Space.MD }) {
       Text('低碳不是一次冲刺，而是每天一点点')

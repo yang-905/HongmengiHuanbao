@@ -1,19 +1,8 @@
-/**
- * 本地演示数据仓库（兜底层）
- * ------------------------------------------------------------------
- * 设计目的：后端未启动 / 网络不可达时，App 依然能呈现完整界面，
- *           便于设计与评审。所有结构与后端 Carbon* 域对象一一对应。
- *
- * 数据特征：
- * - 使用确定性伪随机（同一 seed 每次结果一致），避免每次进入页面数据乱跳
- * - 减排量、积分严格按 Biz 口径换算
- * - 27 项因子与后端种子数据完全一致
- */
+/** 本地演示数据仓库：后端未启动时的完整兜底，结构与后端域对象一一对应 */
 import { Biz } from '../ui/Theme';
 import { LocalStats } from './LocalStore';
 import { AppClock } from '../utils/AppClock';
 
-/** 确定性伪随机：FNV-1a → [0,1) */
 function hash01(s: string): number {
   let h: number = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -23,9 +12,22 @@ function hash01(s: string): number {
   return (h % 10000) / 10000;
 }
 
-/** 今日日期字符串（本地时间校准，见 AppClock：跟随系统时钟） */
 function today(): string {
   return AppClock.dateStr();
+}
+
+function hash32(s: string): number {
+  let h: number = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h * 33) + s.charCodeAt(i)) % 4294967296;
+  }
+  return h >>> 0;
+}
+
+/** 4 位补零（证书编号末位散列用） */
+function pad4(n: number): string {
+  const t: string = '' + n;
+  return t.length >= 4 ? t : '0000'.substring(0, 4 - t.length) + t;
 }
 
 function dateOffset(days: number): string {
@@ -35,8 +37,6 @@ function dateOffset(days: number): string {
 function pad(n: number): string {
   return n < 10 ? '0' + n : '' + n;
 }
-
-/** ---- 数据模型（对应后端字段，驼峰） ---- */
 
 export interface LocalFactor {
   itemId: number;
@@ -67,11 +67,8 @@ export interface LocalRecord {
   dateStr: string;
   recordSource: string;
   remark: string;
-  /** 全局唯一键：跨设备同步与后端幂等共用（老数据由 LocalStore 启动时懒迁移补齐） */
   clientRecordId?: string;
-  /** 最近修改时间戳：跨设备合并时「新者胜」的依据 */
   updateTime?: number;
-  /** 同步标记 local / synced（仅作状态展示，不参与合并判定） */
   syncFlag?: string;
 }
 
@@ -89,20 +86,9 @@ export interface LocalTask {
   status: string;
 }
 
-/**
- * 单条任务领取记录（每日任务奖励的落库单元）。
- * ------------------------------------------------------------------
- * 带 dateStr 而非只存 code：任务每日重置，用领取日期做键，
- * 跨天自然失效（今天查「今天领过没有」只比对今天的记录），
- * 不需要额外的清空逻辑，也不会把昨天的领取算进今天。
- * 落库表：RDB task_claim（见 CarbonRdb）。
- */
 export interface LocalTaskClaim {
-  /** 任务 code（与 LocalTask.taskCode 对应） */
   taskCode: string;
-  /** 领取日期 yyyy-MM-dd（AppClock 口径） */
   dateStr: string;
-  /** 本次发放的奖励积分（用于累计今日任务积分） */
   points: number;
 }
 
@@ -133,16 +119,6 @@ export interface LocalArticle {
   favorite: boolean;
 }
 
-/**
- * 单篇文章的互动状态（用户诉求「点赞收藏要保存记录」）。
- * ------------------------------------------------------------------
- * MockStore 的文章是纯静态演示数据（favorite 固定前 3 篇、likeCount 固定），
- * 详情页点赞/收藏只改页面内存的话，重进页面/重启应用就打回原形。
- * 这里把互动增量按账号落盘（RDB article_interact 表，见 CarbonRdb）：
- *   · liked / faved —— 布尔状态本身；
- *   · likeDelta —— 相对 MockStore 基准数的点赞偏移（+1/-1），
- *     展示值 = 基准 + delta，基准不落盘（跟演示数据走）。
- */
 export interface ArticleInteract {
   liked: boolean
   faved: boolean
@@ -158,41 +134,17 @@ export interface LocalBenefit {
   icon: string;
 }
 
-/**
- * 兑换券（积分商城兑换的权益券，「碳惠券包」页的数据单元）。
- * ------------------------------------------------------------------
- * 与植树证书（LocalCert）的关系：
- *   · 证书 = 兑换消耗中**认养植树**部分的派生视图（certificatesFrom 按积分推导）；
- *   · 券   = 权益兑换部分的**流水实体**，本身即持久化对象。
- * 两者共用 LocalStore 的兑换流水，但口径分离：
- *   · kind='coupon'（公交券/门票/月卡…）只进可用积分扣减，不产生证书；
- *   · kind='tree'（公益植树认养 b7）同时进证书口径，证书自动生成。
- *
- * status 只落盘 'unused' / 'used'：'expired' 由 couponStatus() 按时间推导，
- * 避免「过期态写死后再也翻不了身」——实际产品里过期就是时间比较，不是状态机。
- */
 export interface LocalCoupon {
-  /** 券唯一号：'CP-' + 领取时间戳 + 随机串 */
   couponId: string;
-  /** 来源权益 code（b1~b8） */
   benefitCode: string;
-  /** 权益名（冗余存储：权益下架后已兑换的券仍可展示） */
   benefitName: string;
-  /** 权益图标 emoji */
   benefitIcon: string;
-  /** 兑换消耗积分 */
   points: number;
-  /** 券类型：'coupon' 权益券 / 'tree' 植树认养（进证书口径） */
   kind: string;
-  /** 领取时间戳（ms） */
   issuedAt: number;
-  /** 过期时间戳（ms）= issuedAt + 7 天 */
   expireAt: number;
-  /** 使用状态：'unused' / 'used'（'expired' 不落盘，见接口注释） */
   status: string;
-  /** 使用时间戳（ms），0 = 未使用 */
   usedAt: number;
-  /** 核销二维码内容（确认使用时生成；'' = 未生成） */
   qrContent: string;
 }
 
@@ -260,12 +212,6 @@ export interface LocalOverview {
   monthKg: number;
   totalPoints: number;
   availablePoints: number;
-  /**
-   * 真实兑换消耗（券流水逐笔累加，与 LocalStats.exchangedPoints 同源）。
-   * ⚠️ 不能用 totalPoints − availablePoints 反推：可用积分是**持久化余额**，
-   *   删记录把余额砸到 0 时超出部分被当场抹平（用户诉求「扣到 0 就停住」），
-   *   反推值会小于真实兑换消耗（2026-10-24 口径整改，见 LocalStore）。
-   */
   exchangedPoints: number;
   recordCount: number;
   continuousDays: number;
@@ -280,28 +226,21 @@ export interface TrendPoint {
   points: number;
 }
 
-/**
- * 本地数据仓库
- */
 export class MockStore {
-  /* ---------- 27 项行为因子（与后端种子一致） ---------- */
   static factors(): LocalFactor[] {
     const raw: string[][] = [
-      // travel 绿色出行 6
       ['walk', '步行出行', 'travel', '公里', '0.19', '1', '🚶'],
       ['bike', '骑行出行', 'travel', '公里', '0.19', '1', '🚴'],
       ['bus', '公交出行', 'travel', '公里', '0.10', '5', '🚌'],
       ['metro', '地铁出行', 'travel', '公里', '0.12', '5', '🚇'],
       ['evcar', '新能源汽车', 'travel', '公里', '0.10', '10', '🔋'],
       ['carpool', '拼车合乘', 'travel', '公里', '0.10', '10', '🚗'],
-      // energy 节水节电 6
       ['elec', '节约用电', 'energy', '度', '0.785', '1', '⚡'],
       ['water', '节约用水', 'energy', '升', '0.0009', '50', '💧'],
       ['gas', '节约燃气', 'energy', '立方米', '2.1', '1', '🔥'],
       ['paper', '节约用纸', 'energy', '张', '0.015', '20', '📄'],
       ['ac26', '空调26℃', 'energy', '次', '0.5', '1', '🌡️'],
       ['unplug', '随手断电', 'energy', '次', '0.3', '1', '🔌'],
-      // recycle 旧物回收 8
       ['paper_waste', '废纸回收', 'recycle', '千克', '1.3', '1', '📰'],
       ['plastic', '塑料回收', 'recycle', '千克', '2.7', '1', '🧴'],
       ['metal', '金属回收', 'recycle', '千克', '8.0', '1', '🥫'],
@@ -310,7 +249,6 @@ export class MockStore {
       ['ewaste', '电子废弃物', 'recycle', '千克', '5.0', '1', '📱'],
       ['donate', '旧物捐赠', 'recycle', '件', '3.5', '1', '🎁'],
       ['secondhand', '二手转卖', 'recycle', '件', '4.0', '1', '🔄'],
-      // food 光盘行动 7
       ['clearplate', '光盘行动', 'food', '餐', '0.8', '1', '🍽️'],
       ['veggie', '素食一餐', 'food', '次', '1.5', '1', '🥗'],
       ['lunchbox', '自带餐盒', 'food', '次', '0.15', '1', '🥡'],
@@ -339,22 +277,10 @@ export class MockStore {
     return out;
   }
 
-  /* ---------- 行为记录：近 30 天 ---------- */
   static records(): LocalRecord[] {
     const factors: LocalFactor[] = MockStore.factors();
     const out: LocalRecord[] = [];
     let id: number = 1000;
-    /*
-     * ⚠️ 种子口径修正（用户反馈「一进来碳足迹就那么多」）：
-     * 旧种子在全量 27 个因子里随机挑 + 1~4 倍数量 —— roll 到金属回收(8.0)、
-     * 旧衣(6.0)、电子废弃物(5.0) 这类重因子时，单条就是 20~32 kg 减排，
-     * 首日直接 20+ kg，「已超出 5 kg 目标」的红色告警开机即见，完全失真。
-     * 三重约束修正：
-     *   1. 种子池只取低排放因子（factorValue ≤ 2.8，重因子留给用户手动记）；
-     *   2. 数量倍率 1~2×（原 1~4×）；
-     *   3. 每天 1~2 条（原 1~3 条）。
-     * 修正后单日减排 ≈ 0.1~5 kg，贴合 5 kg 日目标的真实观感。
-     */
     const pool: LocalFactor[] = factors.filter((f: LocalFactor): boolean => f.factorValue <= 2.8);
     for (let day: number = 0; day < 30; day++) {
       const dateStr: string = dateOffset(day);
@@ -387,7 +313,6 @@ export class MockStore {
     return out;
   }
 
-  /* ---------- 碳普惠权益 8 项 ---------- */
   static benefits(): LocalBenefit[] {
     const raw: string[][] = [
       ['b1', '公交地铁乘车券', '500', '兑换 1 张 2 元公共交通乘车券', '🚌'],
@@ -414,38 +339,48 @@ export class MockStore {
     return out;
   }
 
-  /* ---------- 植树证书 ---------- */
   /**
-   * 植树证书：从**真实兑换消耗**推导（每 POINTS_PER_TREE 分 = 1 棵树 = 1 张证书）。
-   * ------------------------------------------------------------------
-   * ⚠️ 口径修正（用户反馈「新号只添加一次记录就显示已发证书 3 张」）：
-   *   旧版写死 3 张演示证书（梭梭/沙枣/胡杨 1+3+5 棵、消耗 1800 分），
-   *   与用户数据完全无关 —— 新号一条记录都还没兑换也"已发 3 张"。
-   *   现与 pointsLogsFrom 同口径：证书只来自真实兑换行为。
-   *   当前商城尚无真实扣分渠道（LocalStore.stats().exchangedPoints 恒为 0）
-   *   → 未兑换账号返回空列表，证书夹展示空态引导（继续加油 / 去商城兑换）。
-   *   真实兑换通道上线后**此处无需再改**：按 exchangedPoints 自动生成。
+   * 植树证书：每张 kind='tree' 的兑换券各生成一张独立证书，
+   * 树种名绑定在券号上（names[hash(couponId) % 4]），与已兑换总棵数无关。
+   * certNo 是证书列表 ForEach 的 keyGenerator；certId 是详情页定位 id。
    */
-  static certificatesFrom(exchangedPoints: number): LocalCert[] {
+  static certificatesFrom(treeCoupons: LocalCoupon[]): LocalCert[] {
     const out: LocalCert[] = [];
-    const totalTrees: number = Math.floor(exchangedPoints / Biz.POINTS_PER_TREE);
-    if (totalTrees <= 0) return out;
     const names: string[] = ['梭梭树', '沙枣树', '胡杨', '柠条'];
-    // 真实兑换流水的逐笔粒度落地前，先把已兑换棵数合成一张汇总证书；
-    // 届时改为按每笔兑换流水各生成一张（certId 取流水 id 即可防重）。
-    out.push({
-      certId: 700,
-      certNo: 'CF-' + dateOffset(0).replace(/-/g, '') + pad(10) + pad(15) + '300',
-      treeType: names[totalTrees % names.length],
-      treeCount: totalTrees,
-      costPoints: totalTrees * Biz.POINTS_PER_TREE,
-      ownerName: '低碳行者',
-      issueDate: dateOffset(0)
-    });
+    for (let i = 0; i < treeCoupons.length; i++) {
+      const cp: LocalCoupon = treeCoupons[i];
+      // 一张券可能覆盖多棵（当前 b7 恰好 3000 分 = 1 棵），按面值逐棵开证
+      const trees: number = Math.floor(cp.points / Biz.POINTS_PER_TREE);
+      for (let t = 0; t < trees; t++) {
+        // 同券多棵时给散列种子加后缀，保证每张证的散列/编号互不相同
+        const seed: string = trees > 1 ? cp.couponId + '#' + t.toString() : cp.couponId;
+        const h: number = hash32(seed);
+        out.push({
+          certId: MockStore.certIdOf(cp.issuedAt, h),
+          certNo: MockStore.certNoOf(cp, h),
+          treeType: names[h % names.length],
+          treeCount: 1,
+          costPoints: Biz.POINTS_PER_TREE,
+          ownerName: '低碳行者',
+          issueDate: AppClock.fmtDate(new Date(cp.issuedAt))
+        });
+      }
+    }
     return out;
   }
 
-  /* ---------- 科普文章 10 篇 ---------- */
+  /** 证书 id：签发时间戳 + 券号散列尾数 */
+  private static certIdOf(issuedAt: number, h: number): number {
+    return issuedAt * 100 + (h % 100)
+  }
+
+  /** 证书编号：'CF-' + 颁发日期(yyyyMMdd) + 时间(HHmm) + 4 位散列 */
+  private static certNoOf(cp: LocalCoupon, h: number): string {
+    const d: Date = new Date(cp.issuedAt);
+    const hm: string = AppClock.fmtTime(d);
+    return 'CF-' + AppClock.fmtDate(d).replace(/-/g, '') + hm.substring(0, 2) + hm.substring(3, 5) + pad4(h % 10000);
+  }
+
   static articles(): LocalArticle[] {
     const raw: string[][] = [
       ['碳达峰碳中和的基本内涵', 'policy', '🌏', '双碳目标的时代背景、时间表与实施路径，一次读懂国家战略。',
@@ -489,7 +424,6 @@ export class MockStore {
     return out;
   }
 
-  /* ---------- 超级终端：家庭设备 ---------- */
   static devices(): LocalDevice[] {
     const raw: string[][] = [
       ['1', '爸爸的手机', 'HUAWEI Mate 60', 'phone', '1', '0'],
@@ -518,12 +452,7 @@ export class MockStore {
     return out;
   }
 
-  /* ---------- 分享文案 ---------- */
-  /**
-   * 分享文案：入参改为真实统计 LocalStats（原 MockStore.overview() 已随
-   * 死链清理移除）。徽章数按真实口径现算（badgesBy 与 DataSource.badges
-   * 同一实现），文案结构与字段插值位置保持不变。
-   */
+  /** 分享文案 */
   static shareText(s: LocalStats): string {
     const badgeCount: number = MockStore.badgesBy(s.totalKg, s.recordCount, s.continuousDays, s.treeCount)
       .filter((b: LocalBadge): boolean => b.unlocked).length;
@@ -535,13 +464,7 @@ export class MockStore {
       '低碳生活，从我做起，一起来记录你的绿色日常吧！🌍';
   }
 
-  /* ---------- AI 识别（复刻端侧演示引擎） ---------- */
-
-  /**
-   * 低碳行为关键词 → 因子 code 词库。
-   * 提取为静态常量：演示词库链路（recognize）与端侧 OCR 识别链路
-   * （AiVisionRecognizer）共用，保证两处命中口径一致。
-   */
+  /** 低碳行为关键词 → 因子 code 词库，与端侧 OCR 识别共用 */
   static readonly KEYWORD_PAIRS: string[][] = [
     ['自行车', 'bike'], ['骑行', 'bike'], ['bike', 'bike'], ['bicycle', 'bike'],
     ['公交', 'bus'], ['bus', 'bus'], ['地铁', 'metro'], ['metro', 'metro'],
@@ -605,11 +528,6 @@ export class MockStore {
     return undefined;
   }
 
-  /* ================================================================
-   * 以下方法基于「用户真实记录」计算，而非预生成的演示数据。
-   * 单机版所有统计页都应走这里，保证录入的行为能立刻反映到各页面。
-   * ================================================================ */
-
   private static sumKg(records: LocalRecord[], cat: string, fromDate: string): number {
     let sum: number = 0;
     for (let i: number = 0; i < records.length; i++) {
@@ -630,7 +548,7 @@ export class MockStore {
     return n;
   }
 
-  /** 趋势：基于真实记录聚合（day=近7天 / week=近8周 / month=近6月 / year=近6年） */
+  /** 趋势：day=近7天 / week=近8周 / month=近6月 / year=近6年 */
   static trendFrom(records: LocalRecord[], granularity: string): TrendPoint[] {
     const out: TrendPoint[] = [];
     if (granularity === 'day') {
@@ -652,8 +570,6 @@ export class MockStore {
         let kg: number = 0;
         for (let i: number = 0; i < records.length; i++) {
           const diff: number = daysBetween(records[i].dateStr, today());
-          // 每根柱子只统计「该周自身」的 7 天窗口 [end, end+7)
-          // end = w*7，w=0 为含今天的最近 7 天，w=7 为 49~55 天前
           if (diff >= end && diff < end + 7) kg += records[i].reduceKg;
         }
         out.push({
@@ -663,9 +579,6 @@ export class MockStore {
         });
       }
     } else if (granularity === 'year') {
-      // 年：近 6 年，按日期字符串的年份前缀聚合。
-      // dateStr 形如 '2026-10-20'，前缀 '2026' 只会命中该年，
-      // 不会误匹配 '2027-...'（四位年份前缀是互斥的）。
       for (let y: number = 5; y >= 0; y--) {
         const d: Date = AppClock.offsetYears(y);
         const prefix: string = '' + d.getFullYear();
@@ -697,7 +610,7 @@ export class MockStore {
     return out;
   }
 
-  /** 分类统计：基于真实记录（reduceKg 为各类合计，便于复用渲染） */
+  /** 分类统计：基于真实记录（reduceKg 为各类合计） */
   static categoryStatsFrom(records: LocalRecord[], days: number): LocalRecord[] {
     const cats: string[] = ['travel', 'energy', 'recycle', 'food'];
     const from: string = dateOffset(days - 1);
@@ -749,13 +662,6 @@ export class MockStore {
         progress = MockStore.countOf(records, d[4], td);
       }
       progress = Math.min(progress, target);
-      /*
-       * status 三态（2026-10-23 修复「点完还是待领取」）：
-       *   claimed 必须由**持久化的领取记录**推导，不能只看进度。
-       *   原实现只有 done/doing 两态，页面把内存里改成 claimed 后，
-       *   下次 tasksFrom 重算又变回 done —— 用户点完刷新就回弹。
-       *   claimed 优先于进度判定：已发放的任务即使进度归零也仍是已领取。
-       */
       const isClaimed: boolean = claimed.indexOf(d[0]) >= 0;
       out.push({
         taskId: i + 1,
@@ -799,7 +705,6 @@ export class MockStore {
       else if (metric === 'days') current = days;
       else if (metric === 'tree') current = treeCount;
       const unlocked: boolean = current >= threshold;
-      // unlockDate 存真实日期；未解锁留空（由页面显示阈值文案）
       const unlockDate: string = unlocked
         ? dateOffset(Math.floor(hash01(d[0] + 'unlock') * 20))
         : '';
@@ -807,7 +712,6 @@ export class MockStore {
         badgeId: i + 1,
         badgeCode: d[0],
         badgeName: d[1],
-        // 与 badges() 保持一致：icon 取 emoji 列 d[3]，description 取文案列 d[2]
         icon: d[3],
         description: d[2],
         metric: metric,

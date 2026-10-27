@@ -1,19 +1,7 @@
 /**
- * 通用懒加载数据源（LazyForEach 的 IDataSource 实现）
- * ------------------------------------------------------------------
- * 背景：全库列表原来一律 `Scroll + Column + ForEach` —— ForEach 是**急切渲染**，
- * 进页面就把全部条目一次建完。记录/积分流水这类随使用增长的列表跑到几百条时，
- * 首屏就要构建整棵大树，滚动时主线程被大量节点的创建/销毁占满，明显掉帧。
- *
- * 用法（三步）：
- *   1. 页面持有 `private source: LazySource<Item> = new LazySource<Item>()`
- *   2. 数据就绪后 `this.source.reload(items)`（替代原来的 @State 数组赋值）
- *   3. UI 用 `LazyForEach(this.source, (item, index) => { ... })`
- *      —— 只有可见区域（+少量缓存）的条目会被创建；
- *      条目组件加 @Reusable 后滚出屏幕的节点会进回收池复用，不再反复新建。
- *
- * 注意：IDataSource / DataChangeListener 是 ArkUI 的**全局接口**（SDK 的
- * component/lazy_for_each.d.ts 里 declare，非 @ohos.* 模块），无需 import。
+ * 通用懒加载数据源（LazyForEach 的 IDataSource 实现）。
+ * 用法：页面持有 source，数据就绪后 reload(items)，UI 用 LazyForEach 渲染。
+ * IDataSource / DataChangeListener 是 ArkUI 全局接口，无需 import。
  */
 
 /** 数据变化监听器集合 */

@@ -44,12 +44,8 @@ function todayStr(): string {
 }
 
 /**
+
  * P26 报表导出
- * ------------------------------------------------------------------
- * 真实实现：日报/月报图片导出——componentSnapshot 截图容器 →
- * imagePacker 打包 PNG → fileIo 写入沙箱 files/export/（真实落盘）；
- * 另提供 CSV 导出演示反馈；可跳转 P28 月度绿色账单查看完整账单
- * 路由名：EXPORT_REPORT（NavDestination，PageMap 集中注册）
  */
 @Component
 export struct ExportReportPage {
@@ -92,10 +88,7 @@ export struct ExportReportPage {
       // DataSource 内部已兜底
     }
   }
-
-  /* ---------- 统计计算 ---------- */
-
-  /** 四大类合计减排（kg） */
+/** 四大类合计减排（kg） */
   private totalKg(): number {
     let sum: number = 0
     for (let i: number = 0; i < this.stats.length; i++) {
@@ -158,10 +151,7 @@ export struct ExportReportPage {
   private pctWidth(r: LocalRecord): string {
     return Math.max(2, this.pctOf(r)) + '%'
   }
-
-  /* ---------- 交互 ---------- */
-
-  /** 导出：演示反馈，不真实写文件 */
+/** 导出：演示反馈，不真实写文件 */
   private exportReport(): void {
     if (this.exporting) return
     if (this.totalKg() <= 0) {
@@ -174,20 +164,12 @@ export struct ExportReportPage {
       toast('月报已生成（演示环境不写入文件）')
     }, 700)
   }
-
-  /* ---------- 日报/月报图片导出（真实落盘） ---------- */
-
-  @State private exportingImg: boolean = false
+@State private exportingImg: boolean = false
 
   /**
+
    * 导出今日数据 / 月报为 PNG 图片并保存到应用沙箱。
-   * ------------------------------------------------------------------
-   * 链路：切换 shotMode 让截图容器按日报/月报重渲染 → 等 80ms
-   *   → componentSnapshot 截取容器 → imagePacker 打包 PNG
-   *   → fileIo 写入沙箱 files/export/ → toast 反馈。
-   * 沙箱内写入不需要任何权限。
-   * 预览器不支持组件截图（无渲染管线），失败时降级提示真机使用。
-   */
+ */
   private exportImage(mode: string): void {
     if (this.exportingImg) return
     const isToday: boolean = mode === 'today'
@@ -246,12 +228,8 @@ export struct ExportReportPage {
   private openMonthBill(): void {
     goWithParamStr(RouteName.MONTH_BILL, 'detailMonth', currentMonth())
   }
-
-
-  /* ---------- 动态碳主题 ---------- */
-
-  /**
-   * 全局碳情绪档位（响应式）。
+/**
+ * 全局碳情绪档位（响应式）。
    * 订阅 AppStorage：任意页面写入新档位时自动重渲染，全应用背景同步。
    */
   @StorageProp('ecoLevel') ecoLevel: string = 'none'
@@ -262,6 +240,7 @@ export struct ExportReportPage {
   }
 
   /**
+
    * 记录变更信号（响应式）。
    * LocalStore 每次写入/删除记录都会 bump 该序号，页面据此即时重算档位，
    * 保证「记完行为切回来背景立刻变色」。
@@ -271,18 +250,7 @@ export struct ExportReportPage {
   /** 记录信号变化 → 重算全局碳档位 */
   /**
    * ecoTick 变化的**真正**回调入口（@Watch 驱动）。
-   * ------------------------------------------------------------------
-   * ⚠️ 这里必须走 @Watch：ArkUI **没有** `onStorageChange` 这个生命周期
-   *    （SDK d.ts 里不存在），框架永远不会调用它。只订阅 @StorageLink
-   *    的结果是「组件重建了、但没有重新拉数据」——
-   *    这正是「记完一笔还要手动刷新」的根因：全库 30+ 个页面都写了
-   *    一个没人调用的方法。
-   *
-   * `@Watch` 才是官方支持的「响应式变量变化回调」：
-   *   记录写入 → DataSource.addRecord → EcoMoodState.broadcastDataChange()
-   *   → AppStorage('ecoTick') +1 → 本方法 → onStorageChange('ecoTick')
-   *   → 重算碳档位 + load() 重拉数据。
-   */
+ */
   onEcoTick(): void {
     this.onStorageChange('ecoTick')
   }
@@ -295,6 +263,7 @@ export struct ExportReportPage {
   }
 
   /**
+
    * 页面入场动画状态（苹果口径，见下方最外层容器的 onAppear）。
    * 每次 push 进入本页都会重放到 0→1，观感是「内容错峰上浮」。
    */
@@ -392,9 +361,7 @@ export struct ExportReportPage {
     }
     .hideTitleBar(true)
   }
-
-  /* ---------- 月份标题卡 ---------- */
-  @Builder
+@Builder
   MonthHead() {
     Row() {
       Column({ space: 3 }) {
@@ -425,9 +392,7 @@ export struct ExportReportPage {
     .borderRadius(Radius.XL)
     .shadow(this.tw(Shadow.brand()))
   }
-
-  /* ---------- 核心三宫格 ---------- */
-  @Builder
+@Builder
   StatRow() {
     Row({ space: Space.MD }) {
       Column() {
@@ -463,9 +428,7 @@ export struct ExportReportPage {
     }
     .width('100%')
   }
-
-  /* ---------- 四大类占比 ---------- */
-  @Builder
+@Builder
   CategoryBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '四大类占比', more: '完整账单 ›', onMoreTap: (): void => this.openMonthBill() })
@@ -525,9 +488,7 @@ export struct ExportReportPage {
     }
     .width('100%')
   }
-
-  /* ---------- 导出操作 ---------- */
-  @Builder
+@Builder
   ActionBlock() {
     Column({ space: Space.MD }) {
       CfSection({ title: '导出报告' })
