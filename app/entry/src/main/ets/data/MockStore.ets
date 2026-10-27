@@ -146,6 +146,20 @@ export interface LocalCoupon {
   status: string;
   usedAt: number;
   qrContent: string;
+  /** 植树认养专属：用户选定的树种；老券无此字段时用 hash 兜底 */
+  treeType?: string;
+}
+
+/** 10 种可认养的本土树种（中国荒漠化治理 / 三北防护林主力） */
+export interface TreeType {
+  /** 内部 key（稳定标识） */
+  key: string;
+  /** 中文名称 */
+  name: string;
+  /** emoji 图标（弹窗内展示用） */
+  icon: string;
+  /** 简短介绍（弹窗副标题） */
+  desc: string;
 }
 
 export interface LocalCert {
@@ -339,26 +353,40 @@ export class MockStore {
     return out;
   }
 
+  /** 10 种可认养本土树种 */
+  static readonly TREE_TYPES: TreeType[] = [
+    { key: 'haloxylon', name: '梭梭树', icon: '🌵', desc: '沙漠先锋 · 固沙卫士' },
+    { key: 'tamarisk', name: '红柳', icon: '🌿', desc: '盐碱斗士 · 耐旱耐涝' },
+    { key: 'poplar', name: '胡杨', icon: '🌳', desc: '沙漠英雄 · 三千年不朽' },
+    { key: 'seabuckthorn', name: '沙棘', icon: '🍊', desc: '经济生态 · 全身是宝' },
+    { key: 'jujube', name: '沙枣树', icon: '🌴', desc: '西北蜜源 · 耐旱耐寒' },
+    { key: 'pine', name: '樟子松', icon: '🌲', desc: '三北主力 · 防风固沙' },
+    { key: 'spruce', name: '云杉', icon: '🏔️', desc: '高山守望 · 涵养水源' },
+    { key: 'cypress', name: '侧柏', icon: '🌱', desc: '北方常绿 · 寿命绵长' },
+    { key: 'willow', name: '旱柳', icon: '🌾', desc: '速生绿化 · 河边卫士' },
+    { key: 'caragana', name: '柠条', icon: '🪴', desc: '固沙灌木 · 耐旱抗风' }
+  ];
+
   /**
-   * 植树证书：每张 kind='tree' 的兑换券各生成一张独立证书，
-   * 树种名绑定在券号上（names[hash(couponId) % 4]），与已兑换总棵数无关。
-   * certNo 是证书列表 ForEach 的 keyGenerator；certId 是详情页定位 id。
+   * 植树证书：每张 kind='tree' 的兑换券各生成一张独立证书。
+   * 优先用券的 treeType 字段（用户选定），无此字段时 hash 兜底（老券兼容）。
    */
   static certificatesFrom(treeCoupons: LocalCoupon[]): LocalCert[] {
     const out: LocalCert[] = [];
-    const names: string[] = ['梭梭树', '沙枣树', '胡杨', '柠条'];
+    const allNames: string[] = MockStore.TREE_TYPES.map((t: TreeType): string => t.name);
     for (let i = 0; i < treeCoupons.length; i++) {
       const cp: LocalCoupon = treeCoupons[i];
-      // 一张券可能覆盖多棵（当前 b7 恰好 3000 分 = 1 棵），按面值逐棵开证
       const trees: number = Math.floor(cp.points / Biz.POINTS_PER_TREE);
       for (let t = 0; t < trees; t++) {
-        // 同券多棵时给散列种子加后缀，保证每张证的散列/编号互不相同
         const seed: string = trees > 1 ? cp.couponId + '#' + t.toString() : cp.couponId;
         const h: number = hash32(seed);
+        const treeName: string = cp.treeType !== undefined && cp.treeType.length > 0
+          ? cp.treeType
+          : allNames[h % allNames.length];
         out.push({
           certId: MockStore.certIdOf(cp.issuedAt, h),
           certNo: MockStore.certNoOf(cp, h),
-          treeType: names[h % names.length],
+          treeType: treeName,
           treeCount: 1,
           costPoints: Biz.POINTS_PER_TREE,
           ownerName: '低碳行者',

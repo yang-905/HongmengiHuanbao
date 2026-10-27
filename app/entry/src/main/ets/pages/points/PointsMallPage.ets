@@ -7,7 +7,7 @@ import { Accent, Biz, FontSize, Glass, Neutral, Radius, Shadow, Space, EcoTheme,
 import { EcoMoodState } from '../../data/EcoMoodState'
 import { CfCard, CfEmpty, CfPill, CfProgress, CfSection, CfStatTile, CfTopBar } from '../../ui/Components'
 import { GlassLight, GlassTier } from '../../ui/GlassLight'
-import { ExchangeConfirmDialog } from '../../ui/GlassDialog'
+import { ExchangeConfirmDialog, TreePickerDialog } from '../../ui/GlassDialog'
 import { AppleMotion } from '../../ui/AppleMotion';
 import { CfIcon } from '../../ui/Icon';
 
@@ -60,6 +60,19 @@ export struct PointsMallPage {
   private exchangeEnterTimer: number = -1
   private exchangeExitTimer: number = -1
   /**
+   * 植树认养 —— 树种选择弹窗（先选树，再确认兑换）。
+   * 流程：点 b7 → 开 TreePicker → 用户选树 → onConfirm(treeName) → 关弹窗 → 调 doExchange(b7, treeName)。
+   */
+  @State private showTree: boolean = false
+  @State private treeIn: boolean = false
+  @State private treeBenefit: LocalBenefit = {
+    benefitId: 0, benefitCode: '', benefitName: '', points: 0,
+    description: '', icon: '🌳'
+  }
+  @State private treeAvailable: number = 0
+  private treeEnterTimer: number = -1
+  private treeExitTimer: number = -1
+  /**
    * 顶部余额卡「可用积分」的滚动显示值（动画中间值）。
    * 兑换后 ov.availablePoints 变化 → 数字从旧值滚到新值（数字滚动动画）。
    */
@@ -74,8 +87,8 @@ export struct PointsMallPage {
   }
 
   aboutToDisappear(): void {
-    // 页面出栈时清掉未触发的入场/退场定时器（持 this 的延时会拖住已销毁页面）
     this.clearExchangeTimers()
+    this.clearTreeTimers()
     this.clearPointsTimer()
   }
 
@@ -125,8 +138,45 @@ export struct PointsMallPage {
     }, 200)
   }
 
-  /**
+  /** 清 TreePicker 入场/退场定时器 */
+  private clearTreeTimers(): void {
+    if (this.treeEnterTimer >= 0) {
+      clearTimeout(this.treeEnterTimer)
+      this.treeEnterTimer = -1
+    }
+    if (this.treeExitTimer >= 0) {
+      clearTimeout(this.treeExitTimer)
+      this.treeExitTimer = -1
+    }
+  }
 
+  /** 打开树种选择弹窗（公益植树 b7 专用入口） */
+  private openTreePicker(b: LocalBenefit): void {
+    this.clearTreeTimers()
+    this.treeBenefit = b
+    this.treeAvailable = this.ov.availablePoints
+    this.treeIn = false
+    this.showTree = true
+    this.treeEnterTimer = setTimeout((): void => {
+      this.treeEnterTimer = -1
+      this.treeIn = true
+    }, 16)
+  }
+
+  /** 关闭树种选择弹窗 */
+  private closeTreePicker(): void {
+    if (this.treeEnterTimer >= 0) {
+      clearTimeout(this.treeEnterTimer)
+      this.treeEnterTimer = -1
+    }
+    this.treeIn = false
+    this.treeExitTimer = setTimeout((): void => {
+      this.treeExitTimer = -1
+      this.showTree = false
+    }, 200)
+  }
+
+  /**
    * 数字滚动动画：把「可用积分」从旧值滚到新值。
    * 现在用 24 帧 × 16ms ≈ 380ms 的缓动滚动，视觉上是平滑过渡。
    * 数值本身由 ov.availablePoints 提供，shownPoints 只是显示中间值。
@@ -211,18 +261,21 @@ private tapBenefit(b: LocalBenefit): void {
       toast('积分不足，还差 ' + this.gapOf(b) + ' 分，继续低碳记录吧')
       return
     }
-    // 可兑换：弹液态玻璃确认窗（覆盖层弹窗，替代旧演示态 toast ——
-    // 确认类交互必须可撤销、可看清后果，系统 toast 既不可撤销也没有按钮位）
-    this.openExchange(b)
+    // 公益植树(b7) 先弹树种选择，其他权益直接确认兑换
+    if (b.benefitCode === 'b7') {
+      this.openTreePicker(b)
+    } else {
+      this.openExchange(b)
+    }
   }
 
   /**
-
    * 确认兑换（弹窗「确定兑换」的落地点）。
+   * treeName：植树认养时用户选定的树种，其他权益 undefined。
  */
-  private async doExchange(b: LocalBenefit): Promise<void> {
+  private async doExchange(b: LocalBenefit, treeName?: string): Promise<void> {
     try {
-      const cp: LocalCoupon | null = await LocalStore.exchange(b)
+      const cp: LocalCoupon | null = await LocalStore.exchange(b, treeName)
       if (cp === null) {
         toast('积分不足，兑换未完成')
         this.load()
@@ -230,7 +283,10 @@ private tapBenefit(b: LocalBenefit): void {
       }
       LocalStore.bumpCouponTick()
       EcoMoodState.broadcastDataChange()
-      toast('兑换成功！已存入『碳惠券包』，7 天内有效')
+      const msg: string = treeName !== undefined && treeName.length > 0
+        ? '兑换成功！已为你认养一棵「' + treeName + '」，证书稍后生成'
+        : '兑换成功！已存入『碳惠券包』，7 天内有效'
+      toast(msg)
       this.load()
     } catch (err) {
       toast('兑换未完成，请重试')
@@ -344,6 +400,20 @@ private tapBenefit(b: LocalBenefit): void {
             onConfirm: (): void => {
               this.closeExchange()
               this.doExchange(this.exchangeBenefit)
+            }
+          })
+        }
+        // 植树认养 —— 树种选择弹窗（液态玻璃，spring 缩放入场，与 ExchangeConfirmDialog 同范式）
+        if (this.showTree) {
+          TreePickerDialog({
+            available: this.treeAvailable,
+            visible: this.treeIn,
+            onCancel: (): void => {
+              this.closeTreePicker()
+            },
+            onConfirm: (treeName: string): void => {
+              this.closeTreePicker()
+              this.doExchange(this.treeBenefit, treeName)
             }
           })
         }

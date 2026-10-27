@@ -886,8 +886,11 @@ export class LocalStore {
     return n
   }
 
-  /** 兑换权益 → 生成券，成功返回新券；积分不足返回 null */
-  static async exchange(benefit: LocalBenefit): Promise<LocalCoupon | null> {
+  /**
+   * 兑换权益 → 生成券，成功返回新券；积分不足返回 null。
+   * treeType：植树认养(b7)时用户选定的树名，写进券里供证书生成；其他权益传 undefined。
+   */
+  static async exchange(benefit: LocalBenefit, treeType?: string): Promise<LocalCoupon | null> {
     const s: LocalStats = await LocalStore.stats()
     if (s.availablePoints < benefit.points) return null
     const now: number = AppClock.now()
@@ -902,7 +905,8 @@ export class LocalStore {
       expireAt: now + COUPON_TTL,
       status: 'unused',
       usedAt: 0,
-      qrContent: ''
+      qrContent: '',
+      treeType: benefit.benefitCode === TREE_BENEFIT_CODE ? (treeType ?? '') : undefined
     }
     LocalStore.coupons_.unshift(cp)
     await CarbonRdb.insertCoupon(LocalStore.user_, cp)
