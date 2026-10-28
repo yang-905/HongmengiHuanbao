@@ -92,11 +92,30 @@
 
 #### 重点 3：性能与功耗——同步读、懒渲染、分级降级
 
-- 同步读取消灭 loading 转圈，首屏可交互时间显著提前；
-- 长列表统一 LazyForEach + 懒加载适配器（LazyList.ets），滚动期只构建可见项；
-- 画质三档降级：模糊半径、高光强度按档位下调，低端机保帧率；
-- 无任何轮询与后台常驻：没有网络请求、没有定时空转，这是单机版功耗表现好的根本原因；
-- 派生统计在写入时重算一次，渲染期不再全量遍历。
+整机以「单机形态 + 端侧优先」为底座，性能与功耗治理贯穿数据加载、列表渲染、视觉质感与 AI 推理四个层面；运行时不依赖任何服务端，无数据同步轮询，切后台不空转。
+
+1. **同步读：冷启动一次解析全量所需数据，首屏零 loading**。
+   `LocalStore.init()`（`app/entry/src/main/ets/data/LocalStore.ets:128`）在冷启动时一次性完成：打开 RDB → 幂等迁移 → 载入文章互动、兑换券、任务领取、种子数据与余额镜像，并以 `loaded_` 标志位防重入。所有业务接口（`DataSource` 的 `overview/trend/records/certificates` 等）首行均 `await LocalStore.init()`，且 `init` 命中 `loaded_` 后立即返回（同文件 :129），因此首屏不出现 spinner、不二次取数，可交互时间显著提前，且与数据总量解耦。记录查询同时走 SQL 按需取与 `LIMIT/OFFSET` 分页（`LocalStore.recordsPage`），首屏只读一页，数据涨到几千条首屏依旧轻快。
+
+2. **懒加载：长列表 LazyForEach + 适配器 + 复用**。
+   通用数据源 `LazyList`（`app/entry/src/main/ets/ui/LazyList.ets`）实现 ArkUI `IDataSource`：`totalCount()/getData(index)` 仅对可见下标调用，`reload()` 走 `onDataReloaded` 语义，不可见项延迟到滚到位再构建。记录、文章、积分流水三类长列表均改为 `List + LazyForEach + @Reusable` 条目（`RecordListPage` / `ArticleListPage` / `PointsRecordPage`），滚动期只渲染视口内组件并回收复用，万级条目下首屏依旧轻快、内存峰值恒定。
+
+3. **画质三档降级：模糊与高光按档位收缩**。
+   `GlassLight` 提供 `CINEMATIC / BALANCED / LITE` 三档（`app/entry/src/main/ets/ui/GlassLight.ets:11`），在「设置 → 画质」中手动切换并持久化（`ThemeMode.persistQuality`，默认 `CINEMATIC`；后续可结合 `deviceInfo` 硬件等级在首启时自动选档）。降级通过统一入口收敛：`blurScaled()` 对模糊半径按 `1.0 / 0.7 / 0` 缩放，`blurOf()` 在 `LITE` 下整体归零；`layerBudget()` 控制玻璃叠加层数 `4 / 3 / 0`（`LITE` 连边缘高光层都裁掉）。低端机降到 `BALANCED/LITE` 后可显著减少离屏合成与模糊计算，保障滚动帧率。
+
+   | 画质档位 | 模糊半径 | 玻璃叠加层数 | 适用场景 |
+   |---|---|---|---|
+   | CINEMATIC（默认） | 基准 ×1.0 | 4 层 | 中高端机，质感优先 |
+   | BALANCED | 基准 ×0.7 | 3 层 | 中端机，质感/帧率平衡 |
+   | LITE | 0（关闭） | 0 层 | 低端机，帧率优先 |
+
+4. **零后台空转：无网络、无轮询、无后台常驻**。
+   全工程无任何 `http/https/fetch/axios/NetworkKit` 调用，AI 推理亦全程离线（照片不出手机）。应用无服务端依赖、无数据同步轮询、无后台常驻任务：`EntryAbility.onBackground()`（`app/entry/src/main/ets/entryability/EntryAbility.ets:70`）为空实现，切后台即停；所有定时器（Index 路由栈 400ms 低频观察、Dashboard 数字滚动、玻璃视差）均为与页面生命周期绑定的 UI 微定时器，在 `aboutToDisappear()` 中 `clearInterval/clearTimeout` 释放，不存在跨页面、跨会话的常驻空转。
+
+5. **AI 推理内存峰值控制**。
+   `AiVisionRecognizer`（`app/entry/src/main/ets/data/ai/AiVisionRecognizer.ets`）对推理输入先做预算裁剪：解码限长边 640 控制内存，再等比放大覆盖并居中裁剪到 224×224（MobileNetV2 输入 `[1,3,224,224]` NCHW float32），预处理按 ImageNet 均值方差归一化。先缩后裁把单张图片的解码内存与输入张量体积钉死，单次推理内存峰值可控，避免低端机因大图解码触发 OOM；模型仅按需从 rawfile 加载到 CPU（`warmUp`/首次识别时），用完不驻留额外后台。
+
+> 派生统计（总减排、连续天数、可用积分等）由 `LocalStore.stats()` 统一计算出口，页面只读派生结果，渲染期不再对全量记录做 O(n) 遍历；四类基线（冷启动、滚动帧率、单次推理耗时/耗电、库文件体积）建议纳入每次迭代验收。
 
 ### 2.3 架构与图示
 
